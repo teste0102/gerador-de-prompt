@@ -1,0 +1,290 @@
+{
+ "academia": {
+  "action": "Correndo",
+  "extra": "chalk dust in the air",
+  "lens": "24mm wide (ambiente)",
+  "shot": "Corpo inteiro (full shot)"
+ },
+ "agua": {
+  "action": "Parado(a) olhando pra lente",
+  "extra": "water droplets frozen mid-air",
+  "lens": "100mm macro (textura extrema)",
+  "shot": "Plano detalhe do objeto (insert)"
+ },
+ "barriga": {
+  "action": "Parado(a) olhando pra lente",
+  "extra": "",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Barriga / abdomen"
+ },
+ "batom": {
+  "action": "Aplicando produto no rosto",
+  "extra": "lip texture and pigment detail",
+  "lens": "100mm macro (textura extrema)",
+  "shot": "Rosto e olhos (extreme close-up)"
+ },
+ "bolsa": {
+  "action": "Girando (fashion spin)",
+  "extra": "leather grain detail",
+  "lens": "50mm standard (olho humano)",
+  "shot": "Cowboy (meio das coxas)"
+ },
+ "busto": {
+  "action": "Parado(a) olhando pra lente",
+  "extra": "",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Busto (ombros e rosto)"
+ },
+ "cabelo": {
+  "action": "Virando o rosto em slow motion",
+  "extra": "hair strands catching the rim light",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Busto (ombros e rosto)"
+ },
+ "cafe": {
+  "action": "Bebendo / tomando um sip",
+  "extra": "steam rising from the cup",
+  "lens": "100mm macro (textura extrema)",
+  "shot": "Maos / detalhe de produto"
+ },
+ "caixa": {
+  "action": "Abrindo a embalagem (unboxing)",
+  "extra": "cardboard texture and tape peel",
+  "lens": "50mm standard (olho humano)",
+  "shot": "Maos / detalhe de produto"
+ },
+ "calca": {
+  "action": "Andando em direcao a lente",
+  "extra": "fabric movement on each step",
+  "lens": "35mm street/documental",
+  "shot": "Pernas"
+ },
+ "carro": {
+  "action": "Parado(a) olhando pra lente",
+  "extra": "reflections sliding across the paint",
+  "lens": "24mm wide (ambiente)",
+  "shot": "Plano amplo (wide / estabelecimento)"
+ },
+ "celular": {
+  "action": "Digitando / usando o celular",
+  "extra": "screen glow reflecting on the fingers",
+  "lens": "100mm macro (textura extrema)",
+  "shot": "Maos / detalhe de produto"
+ },
+ "ceu": {
+  "action": "Olhando para o horizonte",
+  "extra": "cloud movement",
+  "lens": "14mm ultra wide (distorcao)",
+  "shot": "Plano amplo (wide / estabelecimento)"
+ },
+ "chuva": {
+  "action": "Parado(a) olhando pra lente",
+  "extra": "rain droplets on the skin, backlit",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Meio corpo (medium shot)"
+ },
+ "cidade": {
+  "action": "Olhando para o horizonte",
+  "extra": "city depth and parallax",
+  "lens": "24mm wide (ambiente)",
+  "shot": "Plano amplo (wide / estabelecimento)"
+ },
+ "cinto": {
+  "action": "Ajustando a roupa / blazer",
+  "extra": "buckle metal highlight",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Barriga / abdomen"
+ },
+ "colar": {
+  "action": "Parado(a) olhando pra lente",
+  "extra": "jewelry sparkle and skin contrast",
+  "lens": "100mm macro (textura extrema)",
+  "shot": "Busto / decote (detalhe)"
+ },
+ "comida": {
+  "action": "Cozinhando / cortando",
+  "extra": "steam and glistening surface",
+  "lens": "100mm macro (textura extrema)",
+  "shot": "Plano detalhe do objeto (insert)"
+ },
+ "copo": {
+  "action": "Bebendo / tomando um sip",
+  "extra": "condensation on the glass",
+  "lens": "100mm macro (textura extrema)",
+  "shot": "Maos / detalhe de produto"
+ },
+ "copo de agua": {
+  "action": "Bebendo / tomando um sip",
+  "extra": "condensation droplets running down the glass",
+  "lens": "100mm macro (textura extrema)",
+  "shot": "Maos / detalhe de produto"
+ },
+ "corpo": {
+  "action": "Parado(a) olhando pra lente",
+  "extra": "",
+  "lens": "35mm street/documental",
+  "shot": "Corpo inteiro (full shot)"
+ },
+ "corrida": {
+  "action": "Correndo",
+  "extra": "motion blur on the legs",
+  "lens": "135mm telefoto (compressao)",
+  "shot": "Pernas"
+ },
+ "creme": {
+  "action": "Aplicando produto no rosto",
+  "extra": "cream texture spreading on the skin",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Rosto inteiro (close-up)"
+ },
+ "embalagem": {
+  "action": "Abrindo a embalagem (unboxing)",
+  "extra": "packaging detail",
+  "lens": "50mm standard (olho humano)",
+  "shot": "Maos / detalhe de produto"
+ },
+ "espelho": {
+  "action": "Ajustando a roupa / blazer",
+  "extra": "mirror reflection framing",
+  "lens": "50mm standard (olho humano)",
+  "shot": "Busto (ombros e rosto)"
+ },
+ "janela": {
+  "action": "Olhando para o horizonte",
+  "extra": "soft window light wrapping the face",
+  "lens": "35mm street/documental",
+  "shot": "Meio corpo (medium shot)"
+ },
+ "joia": {
+  "action": "Parado(a) olhando pra lente",
+  "extra": "gemstone refraction sparkle",
+  "lens": "100mm macro (textura extrema)",
+  "shot": "Busto / decote (detalhe)"
+ },
+ "laptop": {
+  "action": "Escrevendo / trabalhando",
+  "extra": "screen light on the face",
+  "lens": "35mm street/documental",
+  "shot": "Meio corpo (medium shot)"
+ },
+ "logo": {
+  "action": "Parado(a) olhando pra lente",
+  "extra": "clean brand mark, centered",
+  "lens": "100mm macro (textura extrema)",
+  "shot": "Plano detalhe do objeto (insert)"
+ },
+ "mao": {
+  "action": "Mostrando produto na palma da mao",
+  "extra": "skin and fingertip detail",
+  "lens": "100mm macro (textura extrema)",
+  "shot": "Maos / detalhe de produto"
+ },
+ "maos": {
+  "action": "Mostrando produto na palma da mao",
+  "extra": "skin and fingertip detail",
+  "lens": "100mm macro (textura extrema)",
+  "shot": "Maos / detalhe de produto"
+ },
+ "notebook": {
+  "action": "Escrevendo / trabalhando",
+  "extra": "keyboard backlight glow",
+  "lens": "35mm street/documental",
+  "shot": "Meio corpo (medium shot)"
+ },
+ "olhar": {
+  "action": "Olhar penetrante na lente",
+  "extra": "slow blink",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Rosto e olhos (extreme close-up)"
+ },
+ "olhos": {
+  "action": "Olhar penetrante na lente",
+  "extra": "iris detail and catchlight",
+  "lens": "100mm macro (textura extrema)",
+  "shot": "Rosto e olhos (extreme close-up)"
+ },
+ "perfume": {
+  "action": "Segurando e girando o produto",
+  "extra": "glass refraction and liquid caustics",
+  "lens": "100mm macro (textura extrema)",
+  "shot": "Plano detalhe do objeto (insert)"
+ },
+ "pernas": {
+  "action": "Andando em direcao a lente",
+  "extra": "",
+  "lens": "35mm street/documental",
+  "shot": "Pernas"
+ },
+ "porta": {
+  "action": "Andando em direcao a lente",
+  "extra": "light spilling through the doorway",
+  "lens": "24mm wide (ambiente)",
+  "shot": "Plano amplo (wide / estabelecimento)"
+ },
+ "prato": {
+  "action": "Cozinhando / cortando",
+  "extra": "top-down food styling",
+  "lens": "100mm macro (textura extrema)",
+  "shot": "Plano detalhe do objeto (insert)"
+ },
+ "produto": {
+  "action": "Segurando e girando o produto",
+  "extra": "studio reflection sweep",
+  "lens": "100mm macro (textura extrema)",
+  "shot": "Plano detalhe do objeto (insert)"
+ },
+ "relogio": {
+  "action": "Ajustando a roupa / blazer",
+  "extra": "brushed metal highlight sweep",
+  "lens": "100mm macro (textura extrema)",
+  "shot": "Maos / detalhe de produto"
+ },
+ "rosto": {
+  "action": "Olhar penetrante na lente",
+  "extra": "",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Rosto inteiro (close-up)"
+ },
+ "sapato": {
+  "action": "Andando em direcao a lente",
+  "extra": "polished leather reflection",
+  "lens": "35mm street/documental",
+  "shot": "Pes / calcado"
+ },
+ "skincare": {
+  "action": "Aplicando produto no rosto",
+  "extra": "dewy skin, visible hydration",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Rosto inteiro (close-up)"
+ },
+ "smartphone": {
+  "action": "Digitando / usando o celular",
+  "extra": "screen glow on the fingers",
+  "lens": "100mm macro (textura extrema)",
+  "shot": "Maos / detalhe de produto"
+ },
+ "sorriso": {
+  "action": "Rindo e cobrindo a boca",
+  "extra": "natural eye crinkle",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Rosto inteiro (close-up)"
+ },
+ "tenis": {
+  "action": "Andando em direcao a lente",
+  "extra": "dust kicked up at ground level",
+  "lens": "35mm street/documental",
+  "shot": "Pes / calcado"
+ },
+ "treino": {
+  "action": "Dancando no ritmo",
+  "extra": "sweat beads and muscle definition",
+  "lens": "35mm street/documental",
+  "shot": "Barriga / abdomen"
+ },
+ "vestido": {
+  "action": "Girando (fashion spin)",
+  "extra": "fabric flowing in slow motion",
+  "lens": "35mm street/documental",
+  "shot": "Corpo inteiro (full shot)"
+ }
+}

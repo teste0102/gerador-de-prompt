@@ -55,6 +55,7 @@ APP_VERSION = "1.0"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PRESET_DIR = os.path.join(BASE_DIR, "presets")
 OUTPUT_DIR = os.path.join(BASE_DIR, "saidas")
+DATA_DIR = os.path.join(BASE_DIR, "dados")
 
 # ----------------------------------------------------------------------------
 # PALETA / TEMA
@@ -472,249 +473,15 @@ NEGATIVE_PRESETS = {
 #   Os valores sao os LABELS do catalogo (OPTIONS) para preencher o combo.
 # ----------------------------------------------------------------------------
 KT = namedtuple("KT", "shot lens action extra")
+# Os gatilhos e o glossario ficam em dados/*.json (carregados mais abaixo).
 
-KEYWORD_TRIGGERS: dict[str, KT] = {
-    "celular":      KT("Maos / detalhe de produto", "100mm macro (textura extrema)", "Digitando / usando o celular", "screen glow reflecting on the fingers"),
-    "smartphone":   KT("Maos / detalhe de produto", "100mm macro (textura extrema)", "Digitando / usando o celular", "screen glow on the fingers"),
-    "copo de agua": KT("Maos / detalhe de produto", "100mm macro (textura extrema)", "Bebendo / tomando um sip", "condensation droplets running down the glass"),
-    "copo":         KT("Maos / detalhe de produto", "100mm macro (textura extrema)", "Bebendo / tomando um sip", "condensation on the glass"),
-    "agua":         KT("Plano detalhe do objeto (insert)", "100mm macro (textura extrema)", "Parado(a) olhando pra lente", "water droplets frozen mid-air"),
-    "cafe":         KT("Maos / detalhe de produto", "100mm macro (textura extrema)", "Bebendo / tomando um sip", "steam rising from the cup"),
-    "perfume":      KT("Plano detalhe do objeto (insert)", "100mm macro (textura extrema)", "Segurando e girando o produto", "glass refraction and liquid caustics"),
-    "batom":        KT("Rosto e olhos (extreme close-up)", "100mm macro (textura extrema)", "Aplicando produto no rosto", "lip texture and pigment detail"),
-    "creme":        KT("Rosto inteiro (close-up)", "85mm retrato (fundo cremoso)", "Aplicando produto no rosto", "cream texture spreading on the skin"),
-    "skincare":     KT("Rosto inteiro (close-up)", "85mm retrato (fundo cremoso)", "Aplicando produto no rosto", "dewy skin, visible hydration"),
-    "notebook":     KT("Meio corpo (medium shot)", "35mm street/documental", "Escrevendo / trabalhando", "keyboard backlight glow"),
-    "laptop":       KT("Meio corpo (medium shot)", "35mm street/documental", "Escrevendo / trabalhando", "screen light on the face"),
-    "relogio":      KT("Maos / detalhe de produto", "100mm macro (textura extrema)", "Ajustando a roupa / blazer", "brushed metal highlight sweep"),
-    "tenis":        KT("Pes / calcado", "35mm street/documental", "Andando em direcao a lente", "dust kicked up at ground level"),
-    "sapato":       KT("Pes / calcado", "35mm street/documental", "Andando em direcao a lente", "polished leather reflection"),
-    "bolsa":        KT("Cowboy (meio das coxas)", "50mm standard (olho humano)", "Girando (fashion spin)", "leather grain detail"),
-    "vestido":      KT("Corpo inteiro (full shot)", "35mm street/documental", "Girando (fashion spin)", "fabric flowing in slow motion"),
-    "calca":        KT("Pernas", "35mm street/documental", "Andando em direcao a lente", "fabric movement on each step"),
-    "cinto":        KT("Barriga / abdomen", "85mm retrato (fundo cremoso)", "Ajustando a roupa / blazer", "buckle metal highlight"),
-    "colar":        KT("Busto / decote (detalhe)", "100mm macro (textura extrema)", "Parado(a) olhando pra lente", "jewelry sparkle and skin contrast"),
-    "joia":         KT("Busto / decote (detalhe)", "100mm macro (textura extrema)", "Parado(a) olhando pra lente", "gemstone refraction sparkle"),
-    "olhos":        KT("Rosto e olhos (extreme close-up)", "100mm macro (textura extrema)", "Olhar penetrante na lente", "iris detail and catchlight"),
-    "olhar":        KT("Rosto e olhos (extreme close-up)", "85mm retrato (fundo cremoso)", "Olhar penetrante na lente", "slow blink"),
-    "sorriso":      KT("Rosto inteiro (close-up)", "85mm retrato (fundo cremoso)", "Rindo e cobrindo a boca", "natural eye crinkle"),
-    "cabelo":       KT("Busto (ombros e rosto)", "85mm retrato (fundo cremoso)", "Virando o rosto em slow motion", "hair strands catching the rim light"),
-    "mao":          KT("Maos / detalhe de produto", "100mm macro (textura extrema)", "Mostrando produto na palma da mao", "skin and fingertip detail"),
-    "maos":         KT("Maos / detalhe de produto", "100mm macro (textura extrema)", "Mostrando produto na palma da mao", "skin and fingertip detail"),
-    "caixa":        KT("Maos / detalhe de produto", "50mm standard (olho humano)", "Abrindo a embalagem (unboxing)", "cardboard texture and tape peel"),
-    "embalagem":    KT("Maos / detalhe de produto", "50mm standard (olho humano)", "Abrindo a embalagem (unboxing)", "packaging detail"),
-    "carro":        KT("Plano amplo (wide / estabelecimento)", "24mm wide (ambiente)", "Parado(a) olhando pra lente", "reflections sliding across the paint"),
-    "porta":        KT("Plano amplo (wide / estabelecimento)", "24mm wide (ambiente)", "Andando em direcao a lente", "light spilling through the doorway"),
-    "janela":       KT("Meio corpo (medium shot)", "35mm street/documental", "Olhando para o horizonte", "soft window light wrapping the face"),
-    "espelho":      KT("Busto (ombros e rosto)", "50mm standard (olho humano)", "Ajustando a roupa / blazer", "mirror reflection framing"),
-    "comida":       KT("Plano detalhe do objeto (insert)", "100mm macro (textura extrema)", "Cozinhando / cortando", "steam and glistening surface"),
-    "prato":        KT("Plano detalhe do objeto (insert)", "100mm macro (textura extrema)", "Cozinhando / cortando", "top-down food styling"),
-    "treino":       KT("Barriga / abdomen", "35mm street/documental", "Dancando no ritmo", "sweat beads and muscle definition"),
-    "academia":     KT("Corpo inteiro (full shot)", "24mm wide (ambiente)", "Correndo", "chalk dust in the air"),
-    "corrida":      KT("Pernas", "135mm telefoto (compressao)", "Correndo", "motion blur on the legs"),
-    "pernas":       KT("Pernas", "35mm street/documental", "Andando em direcao a lente", ""),
-    "barriga":      KT("Barriga / abdomen", "85mm retrato (fundo cremoso)", "Parado(a) olhando pra lente", ""),
-    "busto":        KT("Busto (ombros e rosto)", "85mm retrato (fundo cremoso)", "Parado(a) olhando pra lente", ""),
-    "rosto":        KT("Rosto inteiro (close-up)", "85mm retrato (fundo cremoso)", "Olhar penetrante na lente", ""),
-    "corpo":        KT("Corpo inteiro (full shot)", "35mm street/documental", "Parado(a) olhando pra lente", ""),
-    "logo":         KT("Plano detalhe do objeto (insert)", "100mm macro (textura extrema)", "Parado(a) olhando pra lente", "clean brand mark, centered"),
-    "produto":      KT("Plano detalhe do objeto (insert)", "100mm macro (textura extrema)", "Segurando e girando o produto", "studio reflection sweep"),
-    "cidade":       KT("Plano amplo (wide / estabelecimento)", "24mm wide (ambiente)", "Olhando para o horizonte", "city depth and parallax"),
-    "ceu":          KT("Plano amplo (wide / estabelecimento)", "14mm ultra wide (distorcao)", "Olhando para o horizonte", "cloud movement"),
-    "chuva":        KT("Meio corpo (medium shot)", "85mm retrato (fundo cremoso)", "Parado(a) olhando pra lente", "rain droplets on the skin, backlit"),
-}
 
 # ----------------------------------------------------------------------------
 # GLOSSARIO PT -> EN (tradutor offline do roteiro)
 # Nao e um tradutor completo: e um glossario tecnico/cinematografico.
 # Palavras desconhecidas sao mantidas e listadas no aviso de traducao.
 # ----------------------------------------------------------------------------
-GLOSSARY = {
-    "copo de agua": "glass of water", "copo d'agua": "glass of water",
-    "garrafa de agua": "water bottle", "xicara de cafe": "cup of coffee",
-    "celular": "smartphone", "telefone": "phone", "fone de ouvido": "headphones",
-    "notebook": "laptop", "computador": "computer", "teclado": "keyboard",
-    "tela": "screen", "relogio": "wristwatch", "oculos": "glasses",
-    "oculos de sol": "sunglasses", "perfume": "perfume bottle", "batom": "lipstick",
-    "creme": "cream", "hidratante": "moisturizer", "sabonete": "soap",
-    "escova": "brush", "toalha": "towel", "espelho": "mirror",
-    "bolsa": "handbag", "mochila": "backpack", "carteira": "wallet",
-    "sapato": "shoe", "sapatos": "shoes", "tenis": "sneakers", "salto": "high heels",
-    "vestido": "dress", "camiseta": "t-shirt", "camisa": "shirt", "blusa": "blouse",
-    "calca": "trousers", "jeans": "jeans", "saia": "skirt", "jaqueta": "jacket",
-    "blazer": "blazer", "terno": "suit", "casaco": "coat", "cinto": "belt",
-    "colar": "necklace", "brinco": "earring", "anel": "ring", "joia": "jewelry",
-    "cabelo": "hair", "rosto": "face", "olho": "eye", "olhos": "eyes",
-    "boca": "mouth", "labios": "lips", "mao": "hand", "maos": "hands",
-    "dedo": "finger", "dedos": "fingers", "braco": "arm", "bracos": "arms",
-    "perna": "leg", "pernas": "legs", "pe": "foot", "pes": "feet",
-    "ombro": "shoulder", "ombros": "shoulders", "barriga": "midriff",
-    "busto": "chest", "costas": "back", "pele": "skin", "sorriso": "smile",
-    "olhar": "gaze", "respiracao": "breath",
-    "mulher": "woman", "homem": "man", "menina": "girl", "menino": "boy",
-    "pessoa": "person", "modelo": "model", "crianca": "child", "bebe": "baby",
-    "casal": "couple", "grupo": "group", "multidao": "crowd",
-    "jovem": "young", "idoso": "elderly", "adulto": "adult",
-    "cachorro": "dog", "gato": "cat", "cavalo": "horse", "passaro": "bird",
-    "agua": "water", "fogo": "fire", "fumaca": "smoke", "vapor": "steam",
-    "chuva": "rain", "neve": "snow", "vento": "wind", "sol": "sun",
-    "lua": "moon", "ceu": "sky", "nuvem": "cloud", "nuvens": "clouds",
-    "mar": "ocean", "praia": "beach", "montanha": "mountain", "floresta": "forest",
-    "arvore": "tree", "flor": "flower", "folha": "leaf", "petala": "petal",
-    "cidade": "city", "rua": "street", "calcada": "sidewalk", "predio": "building",
-    "casa": "house", "apartamento": "apartment", "quarto": "bedroom",
-    "sala": "living room", "cozinha": "kitchen", "banheiro": "bathroom",
-    "escritorio": "office", "loja": "store", "mercado": "market",
-    "restaurante": "restaurant", "cafeteria": "coffee shop", "academia": "gym",
-    "carro": "car", "moto": "motorcycle", "bicicleta": "bicycle", "aviao": "airplane",
-    "porta": "door", "janela": "window", "mesa": "table", "cadeira": "chair",
-    "cama": "bed", "sofa": "couch", "escada": "stairs", "parede": "wall",
-    "chao": "floor", "teto": "ceiling", "piso": "ground",
-    "luz": "light", "sombra": "shadow", "reflexo": "reflection", "brilho": "glow",
-    "neon": "neon", "lampada": "lamp", "vela": "candle", "poeira": "dust",
-    "comida": "food", "prato": "dish", "bebida": "drink", "cafe": "coffee",
-    "bolo": "cake", "pao": "bread", "fruta": "fruit", "legume": "vegetable",
-    "produto": "product", "caixa": "box", "embalagem": "packaging",
-    "etiqueta": "label", "preco": "price", "logo": "logo", "marca": "brand",
-    "dinheiro": "money", "cartao": "card", "chave": "key", "livro": "book",
-    "papel": "paper", "caneta": "pen", "ferramenta": "tool",
-    "andando": "walking", "andar": "walk", "correndo": "running", "correr": "run",
-    "sentado": "sitting", "sentar": "sit", "deitado": "lying down",
-    "de pe": "standing", "parado": "standing still", "pulando": "jumping",
-    "dancando": "dancing", "girando": "spinning", "virando": "turning",
-    "sorrindo": "smiling", "rindo": "laughing", "chorando": "crying",
-    "falando": "speaking", "gritando": "shouting", "sussurrando": "whispering",
-    "olhando": "looking", "segurando": "holding", "pegando": "picking up",
-    "abrindo": "opening", "fechando": "closing", "mostrando": "showing",
-    "apontando": "pointing", "tocando": "touching", "bebendo": "drinking",
-    "comendo": "eating", "cozinhando": "cooking", "escrevendo": "writing",
-    "digitando": "typing", "lendo": "reading", "dormindo": "sleeping",
-    "acordando": "waking up", "entrando": "entering", "saindo": "leaving",
-    "subindo": "climbing", "descendo": "descending", "caindo": "falling",
-    "respirando": "breathing", "esperando": "waiting", "trabalhando": "working",
-    "treinando": "working out", "aplicando": "applying", "abracando": "hugging",
-    "lento": "slow", "rapido": "fast", "devagar": "slowly", "forte": "strong",
-    "suave": "soft", "duro": "hard", "quente": "warm", "frio": "cold",
-    "claro": "bright", "escuro": "dark", "limpo": "clean", "sujo": "dirty",
-    "novo": "new", "velho": "old", "grande": "large", "pequeno": "small",
-    "bonito": "beautiful", "elegante": "elegant", "simples": "simple",
-    "luxuoso": "luxurious", "moderno": "modern", "antigo": "vintage",
-    "molhado": "wet", "seco": "dry", "brilhante": "shiny", "fosco": "matte",
-    "colorido": "colorful", "neutro": "neutral", "vazio": "empty", "cheio": "full",
-    "manha": "morning", "tarde": "afternoon", "noite": "night",
-    "madrugada": "late night", "amanhecer": "dawn", "anoitecer": "dusk",
-    "dia": "day", "hoje": "today", "segundo": "second", "segundos": "seconds",
-    "camera": "camera", "lente": "lens", "plano": "shot", "cena": "scene",
-    "corte": "cut", "transicao": "transition", "zoom": "zoom", "foco": "focus",
-    "fundo": "background", "primeiro plano": "foreground", "angulo": "angle",
-    "e": "and", "ou": "or", "com": "with", "sem": "without", "em": "in",
-    "no": "in the", "na": "in the", "do": "of the", "da": "of the",
-    "de": "of", "para": "to", "por": "through", "sobre": "over", "sob": "under",
-    "entre": "between", "atras": "behind", "frente": "front", "ao lado": "beside",
-    "dentro": "inside", "fora": "outside", "perto": "close to", "longe": "far from",
-    "um": "a", "uma": "a", "o": "the", "a": "the", "os": "the", "as": "the",
-    "seu": "his", "sua": "her", "meu": "my", "minha": "my", "muito": "very",
-    "pouco": "slightly", "mais": "more", "menos": "less", "enquanto": "while",
-    "depois": "then", "antes": "before", "quando": "when", "tudo": "everything",
-}
 
-# --- ampliacao: aparencia, materiais, adjetivos e verbos usados em descricao ---
-GLOSSARY.update({
-    # frases inteiras (tem prioridade por serem mais longas)
-    "na altura do ombro": "shoulder-length", "na altura dos ombros": "shoulder-length",
-    "na altura da cintura": "waist-length", "no nariz": "on the nose",
-    "no rosto": "on the face", "na pele": "on the skin", "nos olhos": "in the eyes",
-    "nas maos": "on the hands", "de corpo inteiro": "full body",
-    "fundo desfocado": "blurred background", "primeiro plano": "foreground",
-    "luz natural": "natural light", "luz dura": "hard light",
-    "camera na mao": "handheld camera", "camera lenta": "slow motion",
-    "pele clara": "fair skin", "pele morena": "brown skin", "pele negra": "dark skin",
-    "cabelo liso": "straight hair", "cabelo ondulado": "wavy hair",
-    "cabelo cacheado": "curly hair", "cabelo crespo": "coily hair",
-    "olhos claros": "light eyes", "olhos escuros": "dark eyes",
-    "sem camisa": "shirtless", "em pe": "standing",
-    # aparencia
-    "anos": "years old", "idade": "age", "barba": "beard", "bigode": "mustache",
-    "sarda": "freckle", "sardas": "freckles", "ruga": "wrinkle", "rugas": "wrinkles",
-    "tatuagem": "tattoo", "cicatriz": "scar", "sobrancelha": "eyebrow",
-    "cilios": "eyelashes", "iris": "iris", "bochecha": "cheek", "queixo": "chin",
-    "testa": "forehead", "nariz": "nose", "orelha": "ear", "pescoco": "neck",
-    "cintura": "waist", "quadril": "hips", "joelho": "knee", "tornozelo": "ankle",
-    "punho": "wrist", "unha": "nail", "coque": "bun", "franja": "bangs",
-    "trança": "braid", "tranca": "braid", "rabo de cavalo": "ponytail",
-    "maquiagem": "makeup", "batom nude": "nude lipstick", "brilho labial": "lip gloss",
-    "altura": "length", "ombro": "shoulder",
-    # materiais e cenario
-    "planta": "plant", "vaso": "vase", "cortina": "curtain", "linho": "linen",
-    "madeira": "wood", "metal": "metal", "vidro": "glass", "concreto": "concrete",
-    "tijolo": "brick", "marmore": "marble", "couro": "leather", "seda": "silk",
-    "algodao": "cotton", "la": "wool", "tecido": "fabric", "renda": "lace",
-    "plastico": "plastic", "papelao": "cardboard", "tapete": "rug",
-    "prateleira": "shelf", "balcao": "counter", "pia": "sink", "fogao": "stove",
-    "geladeira": "fridge", "abajur": "lamp shade", "quadro": "framed picture",
-    "bancada": "countertop", "poltrona": "armchair", "almofada": "cushion",
-    # cores
-    "preto": "black", "preta": "black", "branco": "white", "branca": "white",
-    "vermelho": "red", "vermelha": "red", "azul": "blue", "verde": "green",
-    "amarelo": "yellow", "amarela": "yellow", "laranja": "orange",
-    "roxo": "purple", "roxa": "purple", "rosa": "pink", "cinza": "gray",
-    "marrom": "brown", "bege": "beige", "dourado": "golden", "dourada": "golden",
-    "prateado": "silver", "prateada": "silver", "nude": "nude",
-    # adjetivos
-    "ondulado": "wavy", "ondulada": "wavy", "liso": "straight", "lisa": "straight",
-    "cacheado": "curly", "cacheada": "curly", "crespo": "coily", "crespa": "coily",
-    "curto": "short", "curta": "short", "comprido": "long", "comprida": "long",
-    "longo": "long", "longa": "long", "loiro": "blonde", "loira": "blonde",
-    "moreno": "brown", "morena": "brown", "negro": "dark", "negra": "dark",
-    "magro": "slim", "magra": "slim", "forte": "strong", "alto": "tall",
-    "alta": "tall", "baixo": "short", "baixa": "short", "jovem": "young",
-    "velha": "old", "leve": "light", "leves": "light", "intenso": "intense",
-    "intensa": "intense", "suave": "soft", "aspero": "rough", "macio": "soft",
-    "brilhoso": "glossy", "opaco": "matte", "transparente": "transparent",
-    "desfocado": "blurred", "desfocada": "blurred", "nitido": "sharp",
-    "nitida": "sharp", "detalhado": "detailed", "detalhada": "detailed",
-    "realista": "realistic", "minimalista": "minimalist", "industrial": "industrial",
-    "rustico": "rustic", "aconchegante": "cozy", "amplo": "spacious",
-    "estreito": "narrow", "profundo": "deep", "raso": "shallow",
-    "audivel": "audible", "proximo": "close", "proxima": "close",
-    "distante": "distant", "lateral": "side", "frontal": "frontal",
-    "traseiro": "rear", "redondo": "round", "quadrado": "square",
-    "fino": "thin", "grosso": "thick", "pesado": "heavy", "sujo": "dirty",
-    "molhada": "wet", "seca": "dry", "quente": "warm", "fria": "cold",
-    "escura": "dark", "clara": "light", "colorida": "colorful",
-    "elegante": "elegant", "simples": "simple", "caro": "expensive",
-    "antiga": "vintage", "moderna": "modern", "natural": "natural",
-    "artificial": "artificial", "volumetrico": "volumetric",
-    "cinematografico": "cinematic", "cinematografica": "cinematic",
-    # verbos / acoes extras
-    "separando": "separating", "refletindo": "reflecting", "escorrendo": "running down",
-    "brilhando": "glowing", "pingando": "dripping", "voando": "flying",
-    "girando no ar": "spinning in the air", "flutuando": "floating",
-    "caminhando": "walking", "levantando": "lifting", "ajustando": "adjusting",
-    "aplicando creme": "applying cream", "balancando": "swaying",
-    "respirando fundo": "taking a deep breath", "piscando": "blinking",
-    "inclinando": "tilting", "apoiando": "leaning", "esperando na fila": "waiting in line",
-    "revelando": "revealing", "cortando": "slicing", "servindo": "pouring",
-    "misturando": "mixing", "provando": "tasting",
-    # ligacoes que faltavam
-    "ao": "at the", "aos": "at the", "nas": "in the", "nos": "in the",
-    "das": "of the", "dos": "of the", "pelo": "through the", "pela": "through the",
-    "num": "in a", "numa": "in a", "deste": "of this", "desta": "of this",
-    "este": "this", "esta": "this", "esse": "that", "essa": "that",
-    "aquele": "that", "aquela": "that", "seus": "their", "suas": "their",
-    "meus": "my", "minhas": "my", "dele": "his", "dela": "her",
-    "ondas soltas": "loose waves", "make natural": "natural makeup",
-    "separando do fundo": "separating from the background",
-    "onda": "wave", "ondas": "waves", "solto": "loose", "soltas": "loose",
-    "make": "makeup", "preso": "tied back", "presa": "tied back",
-    "microfone": "microphone", "condensacao": "condensation", "gota": "drop",
-    "gotas": "drops", "piso": "floor", "respiracao": "breathing",
-    "vinco": "crease", "poro": "pore", "poros": "pores", "suor": "sweat",
-    "lagrima": "tear", "espuma": "foam", "bolha": "bubble", "faisca": "spark",
-    "nevoa": "mist", "neblina": "fog", "orvalho": "dew", "arco-iris": "rainbow",
-    "muito suave": "very soft", "bem": "well", "ja": "already",
-    "entao": "then", "tambem": "also", "apenas": "only", "cada": "each",
-})
 
 # Regras aplicadas ANTES do glossario (regex)
 PRE_RULES = [
@@ -1174,16 +941,110 @@ def en_of(src: str | None, label: str) -> str:
 
 
 # --------------------------------------------------------------------------
+# DICIONARIO EXTERNO (dados/*.json)
+#   dados/gatilhos.json  e dados/glossario.json -> base versionada no Git
+#   dados/usuario.json   -> palavras do usuario (locais, fora do Git);
+#                           vencem a base quando a palavra e a mesma.
+# --------------------------------------------------------------------------
+USER_DICT_FILE = os.path.join(DATA_DIR, "usuario.json")
+DICT_WARNINGS: list[str] = []
+
+
+def _norm_key(txt: str) -> str:
+    return re.sub(r"\s+", " ", deaccent(txt or "").strip().lower())
+
+
+def _read_json(path: str, default):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except FileNotFoundError:
+        return default
+    except Exception as exc:
+        DICT_WARNINGS.append("%s: %s" % (os.path.basename(path), exc))
+        return default
+
+
+KEYWORD_TRIGGERS: dict[str, KT] = {}
+GLOSSARY: dict[str, str] = {}
+USER_DICT: dict = {"gatilhos": {}, "glossario": {}}
+
+
+def _trigger_from(d: dict) -> KT:
+    return KT(d.get("shot", ""), d.get("lens", ""), d.get("action", ""), d.get("extra", ""))
+
+
+def load_dictionaries() -> None:
+    """(Re)carrega base + usuario nos dicionarios globais (alteracao em-place)."""
+    DICT_WARNINGS.clear()
+    base_t = _read_json(os.path.join(DATA_DIR, "gatilhos.json"), {})
+    base_g = _read_json(os.path.join(DATA_DIR, "glossario.json"), {})
+    user = _read_json(USER_DICT_FILE, {})
+    USER_DICT["gatilhos"] = dict(user.get("gatilhos", {}))
+    USER_DICT["glossario"] = dict(user.get("glossario", {}))
+    KEYWORD_TRIGGERS.clear()
+    GLOSSARY.clear()
+    for src in (base_t, USER_DICT["gatilhos"]):
+        for k, v in src.items():
+            KEYWORD_TRIGGERS[_norm_key(k)] = _trigger_from(v)
+    for src in (base_g, USER_DICT["glossario"]):
+        for k, v in src.items():
+            GLOSSARY[_norm_key(k)] = v
+    if not KEYWORD_TRIGGERS and not GLOSSARY:
+        DICT_WARNINGS.append("pasta 'dados' vazia ou ausente: sem gatilhos e sem glossario.")
+    _rebuild_gloss_index()
+
+
+def save_user_dict() -> None:
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(USER_DICT_FILE, "w", encoding="utf-8") as fh:
+        json.dump(USER_DICT, fh, ensure_ascii=False, indent=1, sort_keys=True)
+
+
+def find_trigger(text: str):
+    """Acha o gatilho de um trecho do roteiro. Ignora acento/maiuscula, aceita plural
+    simples e a frase mais longa vence ('copo de agua' ganha de 'copo').
+    Retorna (chave, KT) ou (None, None)."""
+    raw = _norm_key(text)
+    if not raw:
+        return None, None
+
+    def variants(w: str):
+        yield w
+        if w.endswith("es") and len(w) > 4:
+            yield w[:-2]
+        if w.endswith("s") and len(w) > 3:
+            yield w[:-1]
+
+    for cand in variants(raw):
+        if cand in KEYWORD_TRIGGERS:
+            return cand, KEYWORD_TRIGGERS[cand]
+    for k in sorted(KEYWORD_TRIGGERS, key=len, reverse=True):
+        pat = r"(?<![a-z])" + re.escape(k) + r"(?:es|s)?(?![a-z])"
+        if re.search(pat, raw):
+            return k, KEYWORD_TRIGGERS[k]
+    return None, None
+
+
+# --------------------------------------------------------------------------
 # TRADUTOR PT -> EN (glossario tecnico offline)
 # --------------------------------------------------------------------------
-_GLOSS_KEYS = sorted(GLOSSARY.keys(), key=len, reverse=True)
-_ENGLISH_SAFE = set()
-for _v in GLOSSARY.values():
-    _ENGLISH_SAFE.update(re.findall(r"[a-z]+", _v.lower()))
-for _s in (ADJECTIVES_EN, NOUNS_EN):
-    _ENGLISH_SAFE |= _s
+_GLOSS_KEYS: list[str] = []
+_ENGLISH_SAFE: set = set()
+
+
+def _rebuild_gloss_index() -> None:
+    _GLOSS_KEYS[:] = sorted(GLOSSARY.keys(), key=len, reverse=True)
+    _ENGLISH_SAFE.clear()
+    for _v in GLOSSARY.values():
+        _ENGLISH_SAFE.update(re.findall(r"[a-z]+", _v.lower()))
+    for _s in (ADJECTIVES_EN, NOUNS_EN):
+        _ENGLISH_SAFE.update(_s)
+    _ENGLISH_SAFE.update(_ENGLISH_EXTRA)
+
+
 # termos ingleses que podem aparecer digitados direto pelo usuario
-_ENGLISH_SAFE |= {
+_ENGLISH_EXTRA = {
     "the", "and", "with", "of", "in", "on", "at", "a", "an", "to", "from", "by",
     "shot", "lens", "light", "camera", "close", "wide", "macro", "bokeh", "grade",
     "cinematic", "photorealistic", "detail", "style", "motion", "seed", "fps",
@@ -1194,6 +1055,7 @@ _ENGLISH_SAFE |= {
     "also", "only", "already", "well", "this", "that", "their", "his", "her",
     "my", "years", "old", "middle", "aged", "length", "level",
 }
+load_dictionaries()
 _PT_HINT = re.compile(r"(ao$|oes$|aes$|inho$|inha$|mente$|cao$|ndo$|ava$|eiro$|eira$"
                       r"|^nao$|^sem$|^com$|^que$|^uma$|^dos$|^das$|^pra$|^pro$|lh|nh|ç)")
 
@@ -1786,6 +1648,13 @@ def style_app(root):
            foreground=[("active", "#0e1016"), ("pressed", "#0e1016")])
     st.configure("Accent.TButton", background=CLR["accent"], foreground="#0e1016", font=FONT_B)
     st.map("Accent.TButton", background=[("active", "#7bbcff")])
+    st.configure("Treeview", background=CLR["field"], fieldbackground=CLR["field"],
+                 foreground=CLR["fg"], rowheight=22, borderwidth=0, font=FONT)
+    st.configure("Treeview.Heading", background=CLR["panel2"], foreground=CLR["accent"],
+                 font=FONT_B, relief="flat")
+    st.map("Treeview", background=[("selected", CLR["accent"])],
+           foreground=[("selected", "#0e1016")])
+    st.map("Treeview.Heading", background=[("active", CLR["line"])])
     st.configure("TNotebook", background=CLR["bg"], borderwidth=0)
     st.configure("TNotebook.Tab", background=CLR["panel2"], foreground=CLR["fg_dim"],
                  padding=(14, 7), borderwidth=0)
@@ -1859,6 +1728,7 @@ class App(tk.Tk):
         for tabname in ["Personagem", "Ambiente", "Camera", "Luz & Cor", "Audio & Voz", "Motor de IA"]:
             self._build_field_tab(tabname)
         self._build_script_tab()
+        self._build_dict_tab()
         self._build_formula_tab()
         self._build_output_tab()
 
@@ -2111,12 +1981,159 @@ class App(tk.Tk):
         ttk.Button(inner, text="Blocos padrao", command=self.reset_beats).pack(side="right", padx=4)
         ttk.Button(inner, text="Limpar roteiro", command=self.clear_beats).pack(side="right", padx=4)
 
-        tk.Label(wrap, text="Palavras-chave cadastradas: " + ", ".join(sorted(KEYWORD_TRIGGERS)[:28]) + " ...",
+        tk.Label(wrap, text="Palavras-chave cadastradas: " + ", ".join(sorted(KEYWORD_TRIGGERS)[:28]) + " ... (veja e edite todas na aba Dicionario)",
                  bg=CLR["panel"], fg=CLR["fg_dim"], font=("Segoe UI", 8), anchor="w",
                  wraplength=1250, justify="left").pack(fill="x", padx=14, pady=(6, 0))
 
         self.script_sf = ScrollFrame(wrap)
         self.script_sf.pack(fill="both", expand=True, padx=4, pady=6)
+
+    # ------------------------------------------------------------ dicionario
+    def _build_dict_tab(self):
+        wrap = tk.Frame(self.nb, bg=CLR["panel"])
+        self.nb.add(wrap, text="Dicionario")
+        top = tk.Frame(wrap, bg=CLR["panel2"])
+        top.pack(fill="x")
+        inner = tk.Frame(top, bg=CLR["panel2"])
+        inner.pack(fill="x", padx=12, pady=8)
+        tk.Label(inner, text="DICIONARIO", bg=CLR["panel2"], fg=CLR["accent"], font=FONT_H).pack(side="left")
+        InfoIcon(inner, "Dicionario de palavras",
+                 "GATILHOS: palavra do roteiro -> enquadramento, lente, acao e detalhe extra aplicados "
+                 "automaticamente na cena.\n\nGLOSSARIO: traducao PT -> EN usada pelo tradutor offline.\n\n"
+                 "A base fica em dados/gatilhos.json e dados/glossario.json (versionada no Git). "
+                 "As palavras que voce adiciona aqui ficam em dados/usuario.json (so no seu computador) "
+                 "e sempre vencem a base. Remover uma palavra sua faz a da base voltar a valer.\n\n"
+                 "A busca ignora acento, maiuscula e plural; a frase mais longa ganha "
+                 "('copo de agua' vence 'copo').").pack(side="left", padx=8)
+        ttk.Button(inner, text="Recarregar arquivos", command=self.dict_reload).pack(side="right", padx=4)
+
+        bar = tk.Frame(wrap, bg=CLR["panel"])
+        bar.pack(fill="x", padx=12, pady=(8, 2))
+        self.dict_kind = tk.StringVar(value="gatilhos")
+        for txt, val in (("Gatilhos (camera)", "gatilhos"), ("Glossario (traducao)", "glossario")):
+            ttk.Radiobutton(bar, text=txt, value=val, variable=self.dict_kind,
+                            command=self.dict_fill).pack(side="left", padx=(0, 10))
+        tk.Label(bar, text="Buscar:", bg=CLR["panel"], fg=CLR["fg"], font=FONT).pack(side="left", padx=(12, 4))
+        self.dict_q = tk.StringVar()
+        self.dict_q.trace_add("write", lambda *_: self.dict_fill())
+        ttk.Entry(bar, textvariable=self.dict_q, width=28).pack(side="left")
+        self.dict_count = tk.Label(bar, text="", bg=CLR["panel"], fg=CLR["fg_dim"], font=FONT)
+        self.dict_count.pack(side="right")
+
+        cols = ("palavra", "campo1", "campo2", "campo3", "campo4", "origem")
+        self.dict_tree = ttk.Treeview(wrap, columns=cols, show="headings", height=14)
+        self.dict_tree.pack(fill="both", expand=True, padx=12, pady=6)
+        self.dict_tree.bind("<<TreeviewSelect>>", self.dict_pick)
+
+        ed = tk.Frame(wrap, bg=CLR["panel"])
+        ed.pack(fill="x", padx=12, pady=(0, 10))
+        self.dv = {k: tk.StringVar() for k in ("word", "f1", "f2", "f3", "f4")}
+        self.dict_lbls = []
+        self.dict_widgets = []
+        tk.Label(ed, text="Palavra", bg=CLR["panel"], fg=CLR["fg"], font=FONT).grid(row=0, column=0, sticky="w")
+        ttk.Entry(ed, textvariable=self.dv["word"]).grid(row=1, column=0, sticky="ew", padx=(0, 8))
+        for i in range(1, 5):
+            lb = tk.Label(ed, text="", bg=CLR["panel"], fg=CLR["fg"], font=FONT)
+            lb.grid(row=0, column=i, sticky="w")
+            self.dict_lbls.append(lb)
+            cb = ttk.Combobox(ed, textvariable=self.dv["f%d" % i])
+            cb.grid(row=1, column=i, sticky="ew", padx=(0, 8))
+            self.dict_widgets.append(cb)
+            ed.columnconfigure(i, weight=1)
+        ed.columnconfigure(0, weight=1)
+        btns = tk.Frame(ed, bg=CLR["panel"])
+        btns.grid(row=2, column=0, columnspan=5, sticky="w", pady=(8, 0))
+        ttk.Button(btns, text="Salvar / adicionar", command=self.dict_save).pack(side="left", padx=(0, 6))
+        ttk.Button(btns, text="Remover (so as minhas)", command=self.dict_delete).pack(side="left", padx=6)
+        ttk.Button(btns, text="Limpar campos", command=self.dict_clear).pack(side="left", padx=6)
+        self.dict_fill()
+
+    def dict_fill(self):
+        kind = self.dict_kind.get()
+        tree = self.dict_tree
+        tree.delete(*tree.get_children())
+        if kind == "gatilhos":
+            heads = ("Palavra", "Enquadramento", "Lente", "Acao", "Detalhe extra (EN)", "Origem")
+            lists = (opt_list("shot"), opt_list("lens"), opt_list("action"), [])
+        else:
+            heads = ("Palavra (PT)", "Traducao (EN)", "", "", "", "Origem")
+            lists = ([], [], [], [])
+        for col, h in zip(tree["columns"], heads):
+            tree.heading(col, text=h)
+            tree.column(col, width=60 if col == "origem" else 170, stretch=True)
+        for i, lb in enumerate(self.dict_lbls):
+            lb.configure(text=heads[i + 1] if heads[i + 1] else "")
+            self.dict_widgets[i].configure(values=lists[i])
+        q = _norm_key(self.dict_q.get())
+        n = 0
+        data = KEYWORD_TRIGGERS if kind == "gatilhos" else GLOSSARY
+        mine = {_norm_key(k) for k in USER_DICT[kind]}
+        for k in sorted(data):
+            if q and q not in k:
+                continue
+            val = data[k]
+            row = (k, val.shot, val.lens, val.action, val.extra) if kind == "gatilhos" else (k, val, "", "", "")
+            tree.insert("", "end", values=row + ("meu" if k in mine else "base",))
+            n += 1
+        self.dict_count.configure(text="%d palavras" % n)
+
+    def dict_pick(self, _e=None):
+        sel = self.dict_tree.selection()
+        if not sel:
+            return
+        vals = self.dict_tree.item(sel[0], "values")
+        self.dv["word"].set(vals[0])
+        for i in range(1, 5):
+            self.dv["f%d" % i].set(vals[i])
+
+    def dict_clear(self):
+        for var in self.dv.values():
+            var.set("")
+
+    def dict_save(self):
+        kind = self.dict_kind.get()
+        word = _norm_key(self.dv["word"].get())
+        if not word:
+            messagebox.showwarning("Dicionario", "Digite a palavra.")
+            return
+        if kind == "gatilhos":
+            shot, lens, action = (self.dv[k].get().strip() for k in ("f1", "f2", "f3"))
+            if not (shot and lens and action):
+                messagebox.showwarning("Dicionario", "Escolha enquadramento, lente e acao.")
+                return
+            USER_DICT["gatilhos"][word] = {"shot": shot, "lens": lens, "action": action,
+                                           "extra": self.dv["f4"].get().strip()}
+        else:
+            en = self.dv["f1"].get().strip()
+            if not en:
+                messagebox.showwarning("Dicionario", "Digite a traducao em ingles.")
+                return
+            USER_DICT["glossario"][word] = en
+        save_user_dict()
+        load_dictionaries()
+        self.dict_fill()
+        self.status.configure(text="Dicionario: '%s' salvo em dados/usuario.json" % word)
+
+    def dict_delete(self):
+        kind = self.dict_kind.get()
+        word = _norm_key(self.dv["word"].get())
+        mine = {_norm_key(k): k for k in USER_DICT[kind]}
+        if word not in mine:
+            messagebox.showinfo("Dicionario", "Essa palavra nao e sua (e da base) - nada a remover.")
+            return
+        del USER_DICT[kind][mine[word]]
+        save_user_dict()
+        load_dictionaries()
+        self.dict_fill()
+        self.dict_clear()
+
+    def dict_reload(self):
+        load_dictionaries()
+        self.dict_fill()
+        msg = "Dicionarios recarregados."
+        if DICT_WARNINGS:
+            msg += "\nAvisos:\n" + "\n".join(DICT_WARNINGS)
+        messagebox.showinfo("Dicionario", msg)
 
     def _lab(self, parent, text, info, row, col):
         f = tk.Frame(parent, bg=CLR["panel"])
@@ -2178,15 +2195,7 @@ class App(tk.Tk):
         hint.grid(row=1, column=2, columnspan=2, sticky="ew")
 
         def on_kw(*_a):
-            raw = deaccent(v["keyword"].get()).strip().lower()
-            trig, found = None, ""
-            if raw in KEYWORD_TRIGGERS:
-                trig, found = KEYWORD_TRIGGERS[raw], raw
-            else:
-                for k in sorted(KEYWORD_TRIGGERS, key=len, reverse=True):
-                    if re.search(r"(?<![a-z])" + re.escape(deaccent(k)) + r"(?![a-z])", raw):
-                        trig, found = KEYWORD_TRIGGERS[k], k
-                        break
+            found, trig = find_trigger(v["keyword"].get())
             if trig:
                 hint.configure(text="⚡ gatilho '%s' → %s | %s | %s" % (found, trig.shot, trig.lens, trig.action),
                                fg=CLR["ok"])
@@ -2636,6 +2645,8 @@ GUIDE_TEXT = """GUIA RAPIDO - GERADOR DE PROMPT UNIVERSAL
 
 def main():
     app = App()
+    if DICT_WARNINGS:
+        app.status.configure(text="Aviso no dicionario: " + " | ".join(DICT_WARNINGS))
     app.mainloop()
 
 
