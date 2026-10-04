@@ -1,0 +1,2643 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+ GERADOR DE PROMPT UNIVERSAL  -  v1.0
+ Compilador cinematografico de prompts para IA de imagem e video
+ (Midjourney / Runway Gen-3 / Kling / Luma / Sora / Hunyuan / Veo)
+===============================================================================
+
+ COMO FUNCIONA (a "formula"):
+ ---------------------------------------------------------------------------
+ 1. Voce preenche UMA VEZ os blocos fixos: Personagem, Ambiente, Camera,
+    Luz, Audio e Motor de IA.
+ 2. No RECEITA/FORMULA existe um template com tokens ({SUJEITO}, {CAMERA},
+    {LUZ}, ...). O compilador apenas substitui os tokens.
+    => Para mudar a cena inteira voce altera SO UM CAMPO (ex: a luz) e
+       todos os prompts/cenas sao recompilados automaticamente.
+ 3. No ROTEIRO voce escreve palavras-chave ("celular", "copo de agua").
+    Na FRENTE de cada palavra-chave existe a escolha de CAMERA + ANGULO +
+    ENQUADRAMENTO (rosto e olhos / busto / meio corpo / corpo inteiro /
+    pernas / barriga ...). Essa escolha define como AQUELA cena sera
+    gravada. Palavras-chave conhecidas disparam sugestao automatica.
+ 4. SAIDA: cada plataforma recebe o prompt no formato correto, ja em
+    ingles tecnico, com Negative Prompt, seed, fps e shot list.
+
+ Requisitos: Python 3.9+ com tkinter (padrao no Windows).
+ Execucao:   python gerador_de_prompt.py
+ Licenca:    uso livre.
+===============================================================================
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import random
+import re
+import sys
+import textwrap
+import datetime
+from collections import namedtuple
+
+try:
+    import tkinter as tk
+    from tkinter import ttk, filedialog, messagebox
+except Exception as exc:  # pragma: no cover
+    sys.stderr.write(
+        "ERRO: tkinter nao encontrado. No Windows reinstale o Python marcando\n"
+        "'tcl/tk and IDLE'. No Linux: sudo apt install python3-tk\n(%s)\n" % exc
+    )
+    raise
+
+APP_NAME = "Gerador de Prompt Universal"
+APP_VERSION = "1.0"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PRESET_DIR = os.path.join(BASE_DIR, "presets")
+OUTPUT_DIR = os.path.join(BASE_DIR, "saidas")
+
+# ----------------------------------------------------------------------------
+# PALETA / TEMA
+# ----------------------------------------------------------------------------
+CLR = {
+    "bg":        "#191b21",
+    "panel":     "#21242c",
+    "panel2":    "#272b34",
+    "field":     "#2e3340",
+    "line":      "#39404f",
+    "fg":        "#e9ecf2",
+    "fg_dim":    "#9aa3b2",
+    "accent":    "#4da3ff",
+    "accent2":   "#ffb35c",
+    "ok":        "#5ddb9a",
+    "warn":      "#ff6b6b",
+    "tip_bg":    "#11131a",
+}
+FONT = ("Segoe UI", 9)
+FONT_B = ("Segoe UI", 9, "bold")
+FONT_H = ("Segoe UI", 11, "bold")
+FONT_MONO = ("Consolas", 9)
+
+# ----------------------------------------------------------------------------
+# CATALOGO DE OPCOES
+#   Opt(label_pt, en, info)
+#     label_pt -> o que aparece no combo
+#     en       -> termo tecnico que entra no prompt final
+#     info     -> texto do balao ⓘ
+# ----------------------------------------------------------------------------
+Opt = namedtuple("Opt", "label en info")
+
+
+def O(label, en, info=""):
+    return Opt(label, en, info)
+
+
+OPTIONS: dict[str, list[Opt]] = {}
+
+OPTIONS["camera_body"] = [
+    O("ARRI Alexa Mini LF (cinema suave)", "shot on ARRI Alexa Mini LF, high dynamic range, filmic highlight rolloff",
+      "Padrao de cinema de alto orcamento. Pele suave, luz com transicao macia, muita latitude em areas claras. Use em moda, luxo, drama."),
+    O("RED V-Raptor 8K (nitidez extrema)", "shot on RED V-Raptor 8K, ultra sharp, micro-detail texture",
+      "Nitidez agressiva e textura. Otimo para produto, tech, joias e pele com poro visivel. Evite em beauty se quiser pele limpa."),
+    O("Sony FX3 / A7S III (low light)", "shot on Sony FX3, clean low-light sensor, natural color science",
+      "Camera de creator profissional. Boa em cena noturna com pouca luz e ruido baixo."),
+    O("Canon C70 (tom de pele quente)", "shot on Canon C70, warm skin tones, Canon color science",
+      "Tom de pele quente e agradavel. Entrevista, corporativo, lifestyle."),
+    O("iPhone 16 Pro Max na mao (UGC)", "shot on iPhone 16 Pro Max, handheld, casual vertical UGC look",
+      "Estilo influenciador/anuncio nativo. Parece real, nao parece anuncio. Combine com luz de janela e movimento handheld."),
+    O("Filme 35mm Kodak Portra 400", "35mm film, Kodak Portra 400, subtle film grain, halation",
+      "Textura analogica, grao fino, cor pastel organica. Editorial, nostalgia, casamento."),
+    O("Filme 16mm Kodak Vision3 500T", "16mm film, Kodak Vision3 500T, heavy grain, tungsten balance",
+      "Grao forte e cru, cara de documentario antigo ou clipe musical noturno."),
+    O("Polaroid / instant film", "instant polaroid film, soft focus, washed highlights, white frame",
+      "Look de foto instantanea: contraste lavado, foco macio, nostalgia imediata."),
+    O("Camera de seguranca / CCTV", "CCTV security camera footage, low resolution, timestamp overlay, wide angle",
+      "Para suspense, 'vazamento', found footage. Resolucao baixa e grande angular."),
+    O("Drone cinematografico", "aerial drone cinematography, DJI Inspire, smooth gimbal motion",
+      "Plano aereo. Use com movimento 'reveal' e paisagem ampla."),
+]
+
+OPTIONS["lens"] = [
+    O("14mm ultra wide (distorcao)", "14mm ultra wide angle lens, pronounced edge distortion",
+      "Exagera profundidade e deforma bordas. Dramatico, skate, arquitetura, cena claustrofobica."),
+    O("24mm wide (ambiente)", "24mm wide angle lens, environmental context",
+      "Mostra o sujeito DENTRO do ambiente. Bom para cena com cenario importante."),
+    O("35mm street/documental", "35mm lens, documentary framing, balanced subject and environment",
+      "Equilibrio entre pessoa e lugar. Padrao de narrativa e vlog bem feito."),
+    O("50mm standard (olho humano)", "50mm lens, natural human-eye perspective",
+      "Perspectiva neutra, sem distorcao. Seguro para qualquer cena."),
+    O("85mm retrato (fundo cremoso)", "85mm portrait lens, creamy bokeh, facial compression",
+      "Comprime o rosto de forma elegante e derrete o fundo. Padrao de retrato e moda."),
+    O("135mm telefoto (compressao)", "135mm telephoto lens, strong background compression",
+      "Achata o fundo e isola o sujeito de longe. Paparazzi, esporte, isolamento."),
+    O("100mm macro (textura extrema)", "100mm macro lens, extreme texture detail, shallow focus plane",
+      "Gota de agua, poro, tecido, metal. Use junto com enquadramento de detalhe."),
+    O("Anamorfica 2x (flares ovais)", "anamorphic 2x lens, horizontal lens flare, oval bokeh, 2.39:1",
+      "Flares horizontais azuis e bokeh oval. Cara de cinema blockbuster."),
+    O("Tilt-shift (foco seletivo)", "tilt-shift lens, selective plane of focus, miniature effect",
+      "Faz o mundo parecer miniatura ou isola uma faixa de foco diagonal."),
+    O("Lente vintage Helios swirl", "vintage Helios 44-2 lens, swirly bokeh, low contrast glow",
+      "Bokeh em redemoinho e brilho suave. Romantico, sonho, retro."),
+]
+
+OPTIONS["aperture"] = [
+    O("f/1.2 - f/1.8 (fundo muito desfocado)", "shot at f/1.4, razor-thin depth of field, heavy bokeh",
+      "Profundidade rasissima: so o olho fica nitido. Cuidado: IA erra foco em cena com muita acao."),
+    O("f/2.8 (sujeito isolado, seguro)", "shot at f/2.8, shallow depth of field, subject isolation",
+      "Melhor equilibrio entre separacao do fundo e estabilidade da geracao."),
+    O("f/4 - f/5.6 (sujeito + fundo proximo)", "shot at f/4, moderate depth of field",
+      "Sujeito e o que esta logo atras ficam legiveis. Bom para produto na mao."),
+    O("f/8 - f/11 (tudo nitido)", "shot at f/8, deep focus, everything in sharp focus",
+      "Paisagem, arquitetura, cena com varios elementos importantes."),
+    O("f/16 (deep focus total + estrelas de luz)", "shot at f/16, hyperfocal deep focus, starburst highlights",
+      "Maxima profundidade e pontos de luz em estrela. Cena ampla e grafica."),
+]
+
+# ENQUADRAMENTO: o coracao do sistema de palavras-chave
+OPTIONS["shot"] = [
+    O("Rosto e olhos (extreme close-up)", "extreme close-up on the eyes, eyelashes and iris detail filling frame",
+      "Maximo de emocao. Olho, iris, cilios, lagrima. Use com 100mm macro ou 85mm e f/1.4."),
+    O("Rosto inteiro (close-up)", "close-up shot of the face, chin to forehead in frame",
+      "Expressao facial completa. Padrao para fala, reacao e beauty."),
+    O("Busto (ombros e rosto)", "bust shot, head and shoulders, chest up framing",
+      "Enquadramento de entrevista e locucao. Mostra postura e colarinho."),
+    O("Meio corpo (medium shot)", "medium shot, framed from the waist up",
+      "Mostra maos e gesto junto do rosto. Melhor escolha para alguem segurando um objeto."),
+    O("Cowboy (meio das coxas)", "cowboy shot, framed from mid-thigh up",
+      "Mostra corpo e postura sem perder o rosto. Moda e atitude."),
+    O("Corpo inteiro (full shot)", "full body shot, head to feet inside frame",
+      "Roupa, pose e ambiente completos. Essencial para moda e dancar/andar."),
+    O("Plano amplo (wide / estabelecimento)", "wide establishing shot, subject small within the environment",
+      "Apresenta o lugar. Use como primeira cena do roteiro."),
+    O("Busto / decote (detalhe)", "tight chest and neckline detail shot, fabric and jewelry texture",
+      "Detalhe de colar, tecido, decote de roupa. Mantenha descricao de vestuario forte."),
+    O("Barriga / abdomen", "midriff detail shot, waist and abdomen in frame",
+      "Fitness, cintura de roupa, cinto. Combine com luz lateral dura para definicao."),
+    O("Pernas", "legs detail shot, from hips to ankles",
+      "Calca, saia, meia, movimento de caminhada. Angulo baixo aumenta a perna."),
+    O("Pes / calcado", "feet and footwear detail shot, ground level",
+      "Tenis, salto, textura do chao, passo."),
+    O("Maos / detalhe de produto", "extreme close-up of hands holding the product, fingertip detail",
+      "Quando a palavra-chave e um objeto pequeno (celular, perfume, copo)."),
+    O("Costas / nuca", "shot from behind, back and nape of the neck in frame",
+      "Misterio, reveal, caminhada de saida."),
+    O("Over-the-shoulder (por tras do ombro)", "over-the-shoulder shot, shoulder in foreground framing the subject",
+      "Conversa e ponto de vista de quem observa."),
+    O("POV (visao do personagem)", "first person POV shot, hands entering frame from camera position",
+      "O espectador VE pelos olhos do personagem. Otimo para 'unboxing' e tutorial."),
+    O("Plano detalhe do objeto (insert)", "insert shot, isolated product detail on surface",
+      "Objeto sozinho, sem pessoa. Para corte rapido de produto."),
+]
+
+OPTIONS["angle"] = [
+    O("Altura dos olhos (neutro)", "eye-level angle", "Neutro e honesto. Nao julga o personagem."),
+    O("Contra-plonge / baixo (poder)", "low angle looking up, heroic and dominant",
+      "De baixo para cima: deixa o sujeito maior, poderoso, imponente."),
+    O("Plonge / alto (fragilidade)", "high angle looking down", "De cima para baixo: diminui, cria fragilidade ou visao de controle."),
+    O("Holandes / inclinado (tensao)", "dutch angle, tilted horizon", "Horizonte torto = desconforto, loucura, acao."),
+    O("Visao de passaro (top-down)", "bird's eye view, direct top-down", "Direto de cima. Flat lay, mesa, comida, mapa de cena."),
+    O("Nivel do chao (worm's eye)", "worm's eye view from ground level", "Camera no chao. Pernas, tenis, carro, escala gigante."),
+    O("Perfil 90 graus", "perfect profile side angle", "Silhueta do rosto. Grafico e elegante."),
+    O("Tres quartos (3/4)", "three-quarter angle", "Angulo classico de retrato: mostra volume do rosto."),
+    O("Espelho / reflexo", "reflection in mirror framing", "Conta duas coisas ao mesmo tempo: o sujeito e o que ele ve."),
+    O("Atraves de objeto (foreground frame)", "shot through foreground object, natural frame, partial occlusion",
+      "Filmar atraves de folhas, vidro, cortina: cria profundidade real."),
+]
+
+OPTIONS["camera_move"] = [
+    O("Estatico (tripe)", "static locked-off tripod shot", "Sem movimento. Mais estavel para IA, menos distorcao."),
+    O("Push in lento (aproxima)", "slow dolly push in toward the subject", "Aproxima devagar: cresce a tensao e a intimidade."),
+    O("Pull out (afasta e revela)", "slow dolly pull out revealing the environment", "Afasta e revela o contexto. Bom para final de cena."),
+    O("Orbita 180 graus", "smooth 180 degree orbit around the subject", "Gira em volta do sujeito. Impacto alto, risco de deformar rosto."),
+    O("Pan horizontal", "horizontal pan from left to right", "Varre a cena na horizontal."),
+    O("Tilt vertical", "vertical tilt from feet to face", "Sobe do pe ao rosto. Classico de reveal de look."),
+    O("Handheld documental", "organic handheld camera with natural micro-shake", "Tremor natural: parece real, parece agora."),
+    O("Gimbal caminhando atras", "gimbal follow shot walking behind the subject", "Segue o sujeito. Energia de 'venha comigo'."),
+    O("Crane subindo", "crane shot rising upward", "Sobe e abre a cena. Final epico."),
+    O("Whip pan (transicao)", "fast whip pan transition with motion blur", "Virada violenta: usada para CORTAR entre cenas."),
+    O("Rack focus (troca de foco)", "rack focus from foreground to subject", "Muda o foco de um elemento para outro no mesmo plano."),
+    O("Slider lateral (parallax)", "lateral slider move creating parallax", "Desliza de lado: cria profundidade com camadas."),
+    O("Zoom in digital agressivo", "aggressive digital punch-in zoom", "Zoom seco para enfase (meme / viral / reacao)."),
+    O("Camera presa no corpo (snorricam)", "snorricam body-mounted shot, subject fixed, world moving",
+      "Sujeito travado no quadro e mundo girando. Ansiedade, caos."),
+]
+
+OPTIONS["light_style"] = [
+    O("Golden hour lateral", "golden hour side lighting, warm low sun, long shadows",
+      "Sol baixo e dourado do fim de tarde. Favorece pele e cria sombra longa."),
+    O("Luz de janela suave (north light)", "soft diffused window light, large source, gentle falloff",
+      "Luz grande e macia de janela. Natural, limpa, favoravel ao rosto."),
+    O("Rembrandt (triangulo na bochecha)", "Rembrandt lighting, triangle of light on the cheek, dramatic falloff",
+      "Luz a 45 graus formando triangulo de luz na bochecha. Retrato classico e dramatico."),
+    O("Ring light / softbox de estudio", "studio ring light and softbox, flat frontal illumination, catchlight in eyes",
+      "Frontal e sem sombra, com anel de luz no olho. Padrao de beauty, vlog e review."),
+    O("Contraluz dura (rim light)", "hard backlight rim light separating subject from background",
+      "Luz atras recorta o contorno do corpo. Separa do fundo e cria silhueta brilhante."),
+    O("Neon cyberpunk (magenta/ciano)", "cyberpunk neon lighting, magenta and cyan practicals, wet reflections",
+      "Neon colorido e reflexo molhado. Noite urbana, tech, musica."),
+    O("Chiaroscuro / noir", "chiaroscuro low-key lighting, single hard source, deep black shadows",
+      "Quase tudo preto e um feixe de luz. Suspense, misterio, luxo escuro."),
+    O("Luz pratica dentro da cena", "motivated practical lighting from lamps inside the scene",
+      "A luz vem de lampadas visiveis no quadro. Realismo total."),
+    O("Luz de TV / monitor no rosto", "flickering screen light on the face, cold blue glow",
+      "Brilho azul tremulo de tela. Gamer, madrugada, hacker."),
+    O("Overcast difuso (nublado)", "overcast soft daylight, shadowless even illumination",
+      "Dia nublado: zero sombra dura. Comercial clean e produto."),
+    O("Luz dura de meio-dia", "harsh midday sun, hard shadows, high contrast",
+      "Sol a pino: sombra preta e dura. Moda editorial crua, deserto."),
+    O("Projecao de padrao (gobo)", "gobo pattern light projection, venetian blind shadows",
+      "Sombra de persiana ou folhagem projetada no sujeito. Grafico e narrativo."),
+]
+
+OPTIONS["grading"] = [
+    O("Teal & Orange (acao/cinema)", "teal and orange color grade, cinematic blockbuster contrast",
+      "Pele laranja e sombra azulada. Padrao de trailer de acao."),
+    O("Pastel suave baixo contraste", "pastel muted low-contrast grade, lifted blacks, soft palette",
+      "Cor lavada e delicada. Skincare, bebe, clean, wellness."),
+    O("Moody escuro cinematografico", "moody dark cinematic grade, crushed blacks, desaturated midtones",
+      "Escuro, dessaturado, serio. Drama e luxo masculino."),
+    O("Neon cyberpunk saturado", "saturated cyberpunk grade, magenta highlights, cyan shadows",
+      "Cor eletrica e contraste alto. Noite e tecnologia."),
+    O("Kodak quente nostalgico", "warm Kodak film emulation grade, creamy highlights, golden skin",
+      "Quente e nostalgico, como filme fotografico revelado."),
+    O("Bleach bypass (cru e metalico)", "bleach bypass grade, silver desaturated high contrast",
+      "Dessaturado e metalico, quase prateado. Guerra, documental cru."),
+    O("Preto e branco alto contraste", "high contrast black and white, deep blacks, bright specular highlights",
+      "Monocromatico forte. Editorial, atemporal, grafico."),
+    O("Comercial clean neutro", "neutral commercial grade, accurate white balance, clean whites",
+      "Cor correta e fundo branco limpo. E-commerce e corporativo."),
+]
+
+OPTIONS["atmosphere"] = [
+    O("Nevoa volumetrica (haze)", "volumetric haze with visible light beams", "Nevoa fina que deixa os raios de luz visiveis. Profundidade instantanea."),
+    O("Poeira suspensa na luz", "suspended dust particles floating in light rays", "Particulas de poeira brilhando. Galpao, oficina, sol pela janela."),
+    O("Chuva fina", "fine rain falling, wet surfaces, droplets on skin", "Chuva leve e superficie molhada. Drama e reflexo de luz."),
+    O("Fumaca densa colorida", "thick colored smoke drifting through frame", "Fumaca de cor. Clipe, moda, show."),
+    O("Faisca / brasa no ar", "floating embers and sparks in the air", "Brasas subindo. Forja, fogueira, acao."),
+    O("Neve caindo", "gentle falling snow, cold breath vapor", "Neve e vapor da respiracao. Frio real."),
+    O("Folhas / petalas ao vento", "petals and leaves swirling in the wind", "Petalas girando. Romance e beleza."),
+    O("Bokeh de luzes ao fundo", "out of focus bokeh city lights in the background", "Pontos de luz desfocados atras. Noite urbana elegante."),
+    O("Vapor de agua / banheiro", "steam and water vapor rolling through frame", "Vapor quente. Banho, cozinha, academia."),
+    O("Ar limpo (sem particula)", "clean clear air, no atmospheric particles", "Nada no ar. Produto, estudio, maxima nitidez."),
+]
+
+OPTIONS["time_of_day"] = [
+    O("Amanhecer (blue hour)", "pre-dawn blue hour, cold ambient light", "Luz azul fria antes do sol. Calmo e solitario."),
+    O("Manha", "soft morning light", "Luz clara e otimista."),
+    O("Meio-dia", "harsh midday", "Sombra dura e curta, maximo contraste."),
+    O("Tarde", "warm afternoon light", "Luz quente e inclinada."),
+    O("Golden hour", "golden hour just before sunset", "A melhor luz do dia: dourada e lateral."),
+    O("Crepusculo (dusk)", "dusk twilight, deep blue sky with warm practicals", "Ceu azul profundo + luzes acesas. Equilibrio magico."),
+    O("Noite", "night, artificial light only", "So luz artificial."),
+    O("Madrugada", "late night, empty and quiet", "Vazio, silencio, solidao."),
+]
+
+OPTIONS["location"] = [
+    O("Estudio fundo infinito", "seamless studio backdrop, infinite background", "Fundo liso de estudio. Foco total no sujeito/produto."),
+    O("Apartamento minimalista", "minimalist modern apartment interior, neutral tones", "Interior clean e moderno."),
+    O("Cozinha com luz de janela", "bright kitchen with large window light, marble counter", "Comida, rotina, lifestyle."),
+    O("Banheiro com espelho", "bathroom with backlit mirror, tiles, steam", "Skincare, rotina, vapor."),
+    O("Rua urbana noturna com neon", "wet night city street with neon signage", "Noite urbana molhada e colorida."),
+    O("Rooftop na cidade", "city rooftop with skyline behind", "Skyline atras. Ambicao, sucesso."),
+    O("Escritorio corporativo de vidro", "modern glass office interior", "Corporativo, autoridade."),
+    O("Praia / costa", "coastal beach with ocean behind", "Ferias, liberdade, agua."),
+    O("Floresta com raios de sol", "dense forest with god rays through canopy", "Natureza e raios de luz."),
+    O("Deserto arido", "arid desert dunes, heat haze", "Isolamento, calor, escala."),
+    O("Academia / galpao industrial", "industrial gym warehouse, concrete and steel", "Treino, forca, suor."),
+    O("Loja / showroom", "retail showroom with product shelving", "Varejo e produto exposto."),
+    O("Carro (interior)", "inside a car, dashboard reflections", "Conversa intima ou viagem."),
+    O("Palco com show de luzes", "concert stage with moving lights and haze", "Musica e energia."),
+]
+
+OPTIONS["weather"] = [
+    O("Ceu limpo", "clear sky", ""),
+    O("Nublado", "overcast clouds", ""),
+    O("Chuva", "rainy weather, wet ground", ""),
+    O("Tempestade com relampago", "thunderstorm with lightning flashes", ""),
+    O("Vento forte", "strong wind moving hair and fabric", ""),
+    O("Neblina densa", "dense fog reducing visibility", ""),
+]
+
+OPTIONS["expression"] = [
+    O("Neutro confiante", "calm confident neutral expression, steady gaze", "Base segura: nao sorri, nao tensiona. Autoridade."),
+    O("Micro-sorriso sutil", "subtle micro-smile, slight lip corner lift, warm eyes", "Sorriso quase imperceptivel. Mais sofisticado que sorriso aberto."),
+    O("Sorriso aberto genuino", "genuine open smile with visible teeth and eye crinkle", "Alegria real (olho fecha um pouco). Cuidado: IA erra dentes."),
+    O("Olhar penetrante na lente", "intense piercing gaze directly into the lens", "Olha direto na camera. Conexao imediata com quem assiste."),
+    O("Sobrancelha arqueada (duvida)", "one eyebrow raised, skeptical micro-expression", "Duvida/ironia. Otimo para hook de video."),
+    O("Surpresa contida", "contained surprise, widened eyes, parted lips", "Reacao de 'nao acredito'. Gancho de retencao."),
+    O("Riso espontaneo olhando pro lado", "candid laughter looking off-camera", "Parece flagrante, nao posado."),
+    O("Serio melancolico", "melancholic serious expression, downcast eyes", "Drama, saudade, peso."),
+    O("Concentracao focada", "focused concentration, eyes narrowed on task", "Trabalho, artesanato, esporte."),
+    O("Boca pronta para falar (lip-sync)", "mouth slightly open mid-speech, lip-sync ready", "Use SEMPRE que a cena tiver locucao ou fala em sincronia."),
+]
+
+OPTIONS["action"] = [
+    O("Parado(a) olhando pra lente", "standing still, looking into the lens", "Pose base. Minimo movimento = maxima estabilidade na IA."),
+    O("Andando em direcao a lente", "walking toward the camera in slow confident steps", "Entrada de cena. Forte e simples."),
+    O("Virando o rosto em slow motion", "turning the head toward camera in slow motion, hair follows", "Reveal de rosto. Cabelo acompanha o movimento."),
+    O("Mostrando produto na palma da mao", "presenting the product on the open palm toward the lens", "Apresentacao de produto. Combine com enquadramento Maos."),
+    O("Segurando e girando o produto", "holding the product and slowly rotating it to show detail", "Mostra todos os lados do objeto."),
+    O("Apontando para elemento grafico na tela", "pointing at an on-screen graphic element beside them", "Para colocar texto/arte ao lado depois na edicao."),
+    O("Apontando para a propria camera (CTA)", "pointing directly at the lens, direct call to action gesture", "Chamada para acao. Use no bloco The Call / Outro."),
+    O("Abrindo a embalagem (unboxing)", "unboxing, hands opening the package revealing the product", "Momento de revelacao do produto."),
+    O("Aplicando produto no rosto", "applying the product onto the skin with fingertips", "Skincare / maquiagem."),
+    O("Bebendo / tomando um sip", "bringing the glass to the lips and taking a sip", "Bebida, refresco, satisfacao."),
+    O("Digitando / usando o celular", "scrolling and tapping on the smartphone screen", "App, rede social, notificacao."),
+    O("Sentando e cruzando as pernas", "sitting down and crossing the legs with composure", "Entrevista, autoridade, elegancia."),
+    O("Ajustando a roupa / blazer", "adjusting the jacket cuffs and collar", "Poder, preparo, antes de entrar em cena."),
+    O("Girando (fashion spin)", "spinning around so the outfit fabric flares", "Mostra o look inteiro em movimento."),
+    O("Dancando no ritmo", "dancing to the beat with rhythmic body movement", "Energia alta. Use motion strength alto."),
+    O("Correndo", "running at full speed, motion blur on limbs", "Acao. Exige motion strength alto e fps alto."),
+    O("Rindo e cobrindo a boca", "laughing and covering the mouth with the hand", "Natural e humano."),
+    O("Olhando para o horizonte", "gazing toward the horizon, contemplative", "Fim de cena, reflexao."),
+    O("Escrevendo / trabalhando", "writing in a notebook, focused on the task", "Produtividade, estudo."),
+    O("Cozinhando / cortando", "cooking, slicing ingredients on the board", "Comida, receita, mao na massa."),
+]
+
+OPTIONS["wardrobe"] = [
+    O("Alfaiataria preta minimalista", "minimalist black tailored suit, sharp shoulders", "Autoridade, luxo sobrio."),
+    O("Blazer bege oversized", "oversized beige blazer over white tee", "Moderno, confortavel, aspiracional."),
+    O("Camiseta branca basica", "plain white cotton t-shirt", "Neutro. Deixa o foco no rosto/produto."),
+    O("Vestido de seda fluido", "flowing silk slip dress catching the light", "Movimento e elegancia."),
+    O("Jeans e jaqueta de couro", "denim jeans with black leather jacket", "Atitude, rua, rock."),
+    O("Roupa de academia tecnica", "technical athleisure set, moisture-wicking fabric", "Fitness e performance."),
+    O("Jaleco / uniforme profissional", "clean professional lab coat uniform", "Autoridade tecnica, saude."),
+    O("Streetwear oversized", "oversized streetwear hoodie and cargo pants", "Jovem, urbano."),
+    O("Traje de gala / vestido longo", "formal evening gown with subtle sequins", "Evento, premiacao, luxo."),
+    O("Roupa de trabalho suja de oficina", "worn workshop coveralls with grease stains", "Trabalho real, textura, honestidade."),
+]
+
+OPTIONS["style_render"] = [
+    O("Fotorrealista cinematografico", "photorealistic cinematic film still, natural skin texture with visible pores",
+      "Padrao. Pele com poro, luz coerente, cara de frame de filme."),
+    O("Editorial de moda (Vogue)", "high fashion editorial photography, Vogue aesthetic, bold styling",
+      "Pose grafica, styling forte, fundo limpo."),
+    O("Documental cru", "raw documentary photography, available light only, unposed",
+      "Sem pose, sem luz montada. Verdade."),
+    O("Comercial 4K produto", "glossy commercial product photography, controlled studio reflections",
+      "Produto com reflexo controlado e fundo limpo."),
+    O("3D render estilo Pixar", "stylized 3D animated render, Pixar-like character design, subsurface scattering",
+      "Personagem 3D fofo e estilizado."),
+    O("Anime cel-shaded", "anime cel-shaded illustration, clean line art, vibrant flats",
+      "Desenho japones com linha limpa."),
+    O("Pintura digital conceitual", "digital concept art painting, painterly brush texture",
+      "Arte conceitual pintada, nao fotografica."),
+    O("Hyperreal 8K detalhado", "hyperrealistic 8K detail, micro texture everywhere",
+      "Exagero de detalhe. Pode ficar artificial: use com moderacao."),
+    O("Claymation / stop-motion", "stop-motion claymation look, visible fingerprints in clay",
+      "Massinha com textura de dedo. Charme artesanal."),
+    O("VHS anos 90", "1990s VHS tape look, chromatic aberration, scanlines", "Fita velha, ruido, nostalgia."),
+]
+
+OPTIONS["voice_tone"] = [
+    O("ASMR sussurrado intimista", "intimate ASMR whisper voiceover, close-mic breathy delivery",
+      "Voz baixa e muito perto do microfone. Hipnotico, retem atencao."),
+    O("Corporativa firme e confiante", "firm confident corporate voiceover, clear articulation",
+      "Autoridade sem agressividade. Institucional."),
+    O("Documental grave e pausada", "deep paced documentary narration, gravitas",
+      "Voz grave com pausas. Peso e credibilidade."),
+    O("Influenciador energico e rapido", "high-energy fast-paced influencer delivery",
+      "Rapido, animado, sem pausa. Retencao em video curto."),
+    O("Conversa amiga (casual)", "warm casual conversational tone, like talking to a friend",
+      "Natural, com imperfeicao. Parece gente, nao anuncio."),
+    O("Narrador de trailer epico", "epic movie trailer narrator voice, dramatic build",
+      "Exagerado e dramatico. Lancamento."),
+    O("Infantil alegre", "bright cheerful childlike narration", "Produto infantil, animacao."),
+    O("Robotico / IA sintetica", "synthetic AI robotic voice, slight vocoder artifacts", "Tech, futuro, sci-fi."),
+    O("Sem locucao (so ambiente)", "no voiceover, ambient sound design only", "Silencio narrativo: deixa a imagem falar."),
+]
+
+OPTIONS["sfx"] = [
+    O("Whoosh / swish de transicao", "whoosh swish transition sound", "Marca o corte entre cenas."),
+    O("Riser crescente", "tension riser building up", "Cria expectativa antes do reveal."),
+    O("Sub-drop de impacto", "deep sub bass drop impact", "Pancada grave no corte. Impacto fisico."),
+    O("Foley: clique mecanico", "mechanical click foley, tactile button press", "Tampinha, botao, trava. Realismo tatil."),
+    O("Foley: toque na tela", "finger tap on glass screen foley", "Uso de celular."),
+    O("Foley: tecido / roupa", "fabric movement foley, cloth rustle", "Movimento de roupa. Da presenca."),
+    O("Foley: passos", "footsteps foley matched to the floor surface", "Passo no piso certo."),
+    O("Agua / liquido servindo", "pouring liquid and ice clinking", "Bebida. Muito satisfatorio."),
+    O("Ambiente urbano", "city ambience, distant traffic", "Cama de som de rua."),
+    O("Ambiente natureza", "nature ambience, birds and wind in leaves", "Cama de som de floresta/parque."),
+    O("Silencio seco (sem SFX)", "clean silence, no sound effects", "Nada. Para foco total na voz."),
+]
+
+OPTIONS["music"] = [
+    O("Sem musica", "no music", ""),
+    O("Lo-fi minimalista", "minimal lo-fi beat, soft vinyl texture", "Calmo, moderno, nao atrapalha a voz."),
+    O("Cinematico orquestral", "cinematic orchestral score with building strings", "Emocao e escala."),
+    O("Eletronica tensa (techno)", "dark tense techno pulse", "Urgencia, tech, noite."),
+    O("Pop energetico", "upbeat commercial pop track", "Alegre e vendedor."),
+    O("Piano emocional", "sparse emotional piano", "Vulnerabilidade, historia pessoal."),
+    O("Trap / hip-hop 808", "hard trap beat with 808 bass", "Atitude, moda, jovem."),
+    O("Ambient drone", "ambient atmospheric drone pad", "Textura sem melodia. Suspense."),
+]
+
+OPTIONS["aspect"] = [
+    O("9:16 vertical (Reels/TikTok/Shorts)", "9:16", "Video vertical de rede social."),
+    O("16:9 horizontal (YouTube/TV)", "16:9", "Padrao de tela larga."),
+    O("1:1 quadrado (feed)", "1:1", "Feed de Instagram/catalogo."),
+    O("4:5 retrato (feed alto)", "4:5", "Ocupa mais tela no feed que 1:1."),
+    O("2.39:1 cinemascope", "2.39:1", "Faixa larga de cinema. Use com anamorfica."),
+    O("4:3 retro", "4:3", "TV antiga, VHS, nostalgia."),
+]
+
+OPTIONS["fps"] = [
+    O("24 fps (cinema)", "24fps cinematic motion blur", "Movimento com rastro natural de cinema."),
+    O("30 fps (social media)", "30fps", "Padrao de rede social, mais 'video'."),
+    O("60 fps (fluido / slow-mo)", "60fps smooth motion, slow-motion ready", "Permite camera lenta sem travar."),
+    O("120 fps (super slow motion)", "120fps high speed capture for extreme slow motion", "Slow motion extremo: gota, cabelo, impacto."),
+]
+
+NEGATIVE_BASE = (
+    "bad anatomy, extra limbs, extra fingers, fused fingers, deformed hands, "
+    "mutated face, asymmetric eyes, crossed eyes, blurry, out of focus, low resolution, "
+    "jpeg artifacts, text, watermark, logo, signature, subtitles, caption, "
+    "plastic skin, waxy skin, oversaturated, overexposed, flat lighting, "
+    "flicker, morphing, warping, jitter, duplicated subject, cloned face, "
+    "distorted background, floating objects, broken perspective, "
+    "cgi look, uncanny valley, stiff motion, ugly, amateur"
+)
+
+NEGATIVE_PRESETS = {
+    "Padrao (completo)": NEGATIVE_BASE,
+    "Retrato / beauty": NEGATIVE_BASE + ", heavy makeup, airbrushed skin, missing pores, dead eyes",
+    "Produto": NEGATIVE_BASE + ", wrong label, misspelled packaging, dented product, dust on product",
+    "Video / movimento": NEGATIVE_BASE + ", frame drop, ghosting trails, sliding feet, teleporting limbs, background morph",
+    "Leve (menos restritivo)": "blurry, low resolution, text, watermark, bad anatomy, deformed hands",
+}
+
+# ----------------------------------------------------------------------------
+# GATILHOS DE PALAVRA-CHAVE
+#   palavra no roteiro -> sugestao de (enquadramento, lente, acao, extra)
+#   Os valores sao os LABELS do catalogo (OPTIONS) para preencher o combo.
+# ----------------------------------------------------------------------------
+KT = namedtuple("KT", "shot lens action extra")
+
+KEYWORD_TRIGGERS: dict[str, KT] = {
+    "celular":      KT("Maos / detalhe de produto", "100mm macro (textura extrema)", "Digitando / usando o celular", "screen glow reflecting on the fingers"),
+    "smartphone":   KT("Maos / detalhe de produto", "100mm macro (textura extrema)", "Digitando / usando o celular", "screen glow on the fingers"),
+    "copo de agua": KT("Maos / detalhe de produto", "100mm macro (textura extrema)", "Bebendo / tomando um sip", "condensation droplets running down the glass"),
+    "copo":         KT("Maos / detalhe de produto", "100mm macro (textura extrema)", "Bebendo / tomando um sip", "condensation on the glass"),
+    "agua":         KT("Plano detalhe do objeto (insert)", "100mm macro (textura extrema)", "Parado(a) olhando pra lente", "water droplets frozen mid-air"),
+    "cafe":         KT("Maos / detalhe de produto", "100mm macro (textura extrema)", "Bebendo / tomando um sip", "steam rising from the cup"),
+    "perfume":      KT("Plano detalhe do objeto (insert)", "100mm macro (textura extrema)", "Segurando e girando o produto", "glass refraction and liquid caustics"),
+    "batom":        KT("Rosto e olhos (extreme close-up)", "100mm macro (textura extrema)", "Aplicando produto no rosto", "lip texture and pigment detail"),
+    "creme":        KT("Rosto inteiro (close-up)", "85mm retrato (fundo cremoso)", "Aplicando produto no rosto", "cream texture spreading on the skin"),
+    "skincare":     KT("Rosto inteiro (close-up)", "85mm retrato (fundo cremoso)", "Aplicando produto no rosto", "dewy skin, visible hydration"),
+    "notebook":     KT("Meio corpo (medium shot)", "35mm street/documental", "Escrevendo / trabalhando", "keyboard backlight glow"),
+    "laptop":       KT("Meio corpo (medium shot)", "35mm street/documental", "Escrevendo / trabalhando", "screen light on the face"),
+    "relogio":      KT("Maos / detalhe de produto", "100mm macro (textura extrema)", "Ajustando a roupa / blazer", "brushed metal highlight sweep"),
+    "tenis":        KT("Pes / calcado", "35mm street/documental", "Andando em direcao a lente", "dust kicked up at ground level"),
+    "sapato":       KT("Pes / calcado", "35mm street/documental", "Andando em direcao a lente", "polished leather reflection"),
+    "bolsa":        KT("Cowboy (meio das coxas)", "50mm standard (olho humano)", "Girando (fashion spin)", "leather grain detail"),
+    "vestido":      KT("Corpo inteiro (full shot)", "35mm street/documental", "Girando (fashion spin)", "fabric flowing in slow motion"),
+    "calca":        KT("Pernas", "35mm street/documental", "Andando em direcao a lente", "fabric movement on each step"),
+    "cinto":        KT("Barriga / abdomen", "85mm retrato (fundo cremoso)", "Ajustando a roupa / blazer", "buckle metal highlight"),
+    "colar":        KT("Busto / decote (detalhe)", "100mm macro (textura extrema)", "Parado(a) olhando pra lente", "jewelry sparkle and skin contrast"),
+    "joia":         KT("Busto / decote (detalhe)", "100mm macro (textura extrema)", "Parado(a) olhando pra lente", "gemstone refraction sparkle"),
+    "olhos":        KT("Rosto e olhos (extreme close-up)", "100mm macro (textura extrema)", "Olhar penetrante na lente", "iris detail and catchlight"),
+    "olhar":        KT("Rosto e olhos (extreme close-up)", "85mm retrato (fundo cremoso)", "Olhar penetrante na lente", "slow blink"),
+    "sorriso":      KT("Rosto inteiro (close-up)", "85mm retrato (fundo cremoso)", "Rindo e cobrindo a boca", "natural eye crinkle"),
+    "cabelo":       KT("Busto (ombros e rosto)", "85mm retrato (fundo cremoso)", "Virando o rosto em slow motion", "hair strands catching the rim light"),
+    "mao":          KT("Maos / detalhe de produto", "100mm macro (textura extrema)", "Mostrando produto na palma da mao", "skin and fingertip detail"),
+    "maos":         KT("Maos / detalhe de produto", "100mm macro (textura extrema)", "Mostrando produto na palma da mao", "skin and fingertip detail"),
+    "caixa":        KT("Maos / detalhe de produto", "50mm standard (olho humano)", "Abrindo a embalagem (unboxing)", "cardboard texture and tape peel"),
+    "embalagem":    KT("Maos / detalhe de produto", "50mm standard (olho humano)", "Abrindo a embalagem (unboxing)", "packaging detail"),
+    "carro":        KT("Plano amplo (wide / estabelecimento)", "24mm wide (ambiente)", "Parado(a) olhando pra lente", "reflections sliding across the paint"),
+    "porta":        KT("Plano amplo (wide / estabelecimento)", "24mm wide (ambiente)", "Andando em direcao a lente", "light spilling through the doorway"),
+    "janela":       KT("Meio corpo (medium shot)", "35mm street/documental", "Olhando para o horizonte", "soft window light wrapping the face"),
+    "espelho":      KT("Busto (ombros e rosto)", "50mm standard (olho humano)", "Ajustando a roupa / blazer", "mirror reflection framing"),
+    "comida":       KT("Plano detalhe do objeto (insert)", "100mm macro (textura extrema)", "Cozinhando / cortando", "steam and glistening surface"),
+    "prato":        KT("Plano detalhe do objeto (insert)", "100mm macro (textura extrema)", "Cozinhando / cortando", "top-down food styling"),
+    "treino":       KT("Barriga / abdomen", "35mm street/documental", "Dancando no ritmo", "sweat beads and muscle definition"),
+    "academia":     KT("Corpo inteiro (full shot)", "24mm wide (ambiente)", "Correndo", "chalk dust in the air"),
+    "corrida":      KT("Pernas", "135mm telefoto (compressao)", "Correndo", "motion blur on the legs"),
+    "pernas":       KT("Pernas", "35mm street/documental", "Andando em direcao a lente", ""),
+    "barriga":      KT("Barriga / abdomen", "85mm retrato (fundo cremoso)", "Parado(a) olhando pra lente", ""),
+    "busto":        KT("Busto (ombros e rosto)", "85mm retrato (fundo cremoso)", "Parado(a) olhando pra lente", ""),
+    "rosto":        KT("Rosto inteiro (close-up)", "85mm retrato (fundo cremoso)", "Olhar penetrante na lente", ""),
+    "corpo":        KT("Corpo inteiro (full shot)", "35mm street/documental", "Parado(a) olhando pra lente", ""),
+    "logo":         KT("Plano detalhe do objeto (insert)", "100mm macro (textura extrema)", "Parado(a) olhando pra lente", "clean brand mark, centered"),
+    "produto":      KT("Plano detalhe do objeto (insert)", "100mm macro (textura extrema)", "Segurando e girando o produto", "studio reflection sweep"),
+    "cidade":       KT("Plano amplo (wide / estabelecimento)", "24mm wide (ambiente)", "Olhando para o horizonte", "city depth and parallax"),
+    "ceu":          KT("Plano amplo (wide / estabelecimento)", "14mm ultra wide (distorcao)", "Olhando para o horizonte", "cloud movement"),
+    "chuva":        KT("Meio corpo (medium shot)", "85mm retrato (fundo cremoso)", "Parado(a) olhando pra lente", "rain droplets on the skin, backlit"),
+}
+
+# ----------------------------------------------------------------------------
+# GLOSSARIO PT -> EN (tradutor offline do roteiro)
+# Nao e um tradutor completo: e um glossario tecnico/cinematografico.
+# Palavras desconhecidas sao mantidas e listadas no aviso de traducao.
+# ----------------------------------------------------------------------------
+GLOSSARY = {
+    "copo de agua": "glass of water", "copo d'agua": "glass of water",
+    "garrafa de agua": "water bottle", "xicara de cafe": "cup of coffee",
+    "celular": "smartphone", "telefone": "phone", "fone de ouvido": "headphones",
+    "notebook": "laptop", "computador": "computer", "teclado": "keyboard",
+    "tela": "screen", "relogio": "wristwatch", "oculos": "glasses",
+    "oculos de sol": "sunglasses", "perfume": "perfume bottle", "batom": "lipstick",
+    "creme": "cream", "hidratante": "moisturizer", "sabonete": "soap",
+    "escova": "brush", "toalha": "towel", "espelho": "mirror",
+    "bolsa": "handbag", "mochila": "backpack", "carteira": "wallet",
+    "sapato": "shoe", "sapatos": "shoes", "tenis": "sneakers", "salto": "high heels",
+    "vestido": "dress", "camiseta": "t-shirt", "camisa": "shirt", "blusa": "blouse",
+    "calca": "trousers", "jeans": "jeans", "saia": "skirt", "jaqueta": "jacket",
+    "blazer": "blazer", "terno": "suit", "casaco": "coat", "cinto": "belt",
+    "colar": "necklace", "brinco": "earring", "anel": "ring", "joia": "jewelry",
+    "cabelo": "hair", "rosto": "face", "olho": "eye", "olhos": "eyes",
+    "boca": "mouth", "labios": "lips", "mao": "hand", "maos": "hands",
+    "dedo": "finger", "dedos": "fingers", "braco": "arm", "bracos": "arms",
+    "perna": "leg", "pernas": "legs", "pe": "foot", "pes": "feet",
+    "ombro": "shoulder", "ombros": "shoulders", "barriga": "midriff",
+    "busto": "chest", "costas": "back", "pele": "skin", "sorriso": "smile",
+    "olhar": "gaze", "respiracao": "breath",
+    "mulher": "woman", "homem": "man", "menina": "girl", "menino": "boy",
+    "pessoa": "person", "modelo": "model", "crianca": "child", "bebe": "baby",
+    "casal": "couple", "grupo": "group", "multidao": "crowd",
+    "jovem": "young", "idoso": "elderly", "adulto": "adult",
+    "cachorro": "dog", "gato": "cat", "cavalo": "horse", "passaro": "bird",
+    "agua": "water", "fogo": "fire", "fumaca": "smoke", "vapor": "steam",
+    "chuva": "rain", "neve": "snow", "vento": "wind", "sol": "sun",
+    "lua": "moon", "ceu": "sky", "nuvem": "cloud", "nuvens": "clouds",
+    "mar": "ocean", "praia": "beach", "montanha": "mountain", "floresta": "forest",
+    "arvore": "tree", "flor": "flower", "folha": "leaf", "petala": "petal",
+    "cidade": "city", "rua": "street", "calcada": "sidewalk", "predio": "building",
+    "casa": "house", "apartamento": "apartment", "quarto": "bedroom",
+    "sala": "living room", "cozinha": "kitchen", "banheiro": "bathroom",
+    "escritorio": "office", "loja": "store", "mercado": "market",
+    "restaurante": "restaurant", "cafeteria": "coffee shop", "academia": "gym",
+    "carro": "car", "moto": "motorcycle", "bicicleta": "bicycle", "aviao": "airplane",
+    "porta": "door", "janela": "window", "mesa": "table", "cadeira": "chair",
+    "cama": "bed", "sofa": "couch", "escada": "stairs", "parede": "wall",
+    "chao": "floor", "teto": "ceiling", "piso": "ground",
+    "luz": "light", "sombra": "shadow", "reflexo": "reflection", "brilho": "glow",
+    "neon": "neon", "lampada": "lamp", "vela": "candle", "poeira": "dust",
+    "comida": "food", "prato": "dish", "bebida": "drink", "cafe": "coffee",
+    "bolo": "cake", "pao": "bread", "fruta": "fruit", "legume": "vegetable",
+    "produto": "product", "caixa": "box", "embalagem": "packaging",
+    "etiqueta": "label", "preco": "price", "logo": "logo", "marca": "brand",
+    "dinheiro": "money", "cartao": "card", "chave": "key", "livro": "book",
+    "papel": "paper", "caneta": "pen", "ferramenta": "tool",
+    "andando": "walking", "andar": "walk", "correndo": "running", "correr": "run",
+    "sentado": "sitting", "sentar": "sit", "deitado": "lying down",
+    "de pe": "standing", "parado": "standing still", "pulando": "jumping",
+    "dancando": "dancing", "girando": "spinning", "virando": "turning",
+    "sorrindo": "smiling", "rindo": "laughing", "chorando": "crying",
+    "falando": "speaking", "gritando": "shouting", "sussurrando": "whispering",
+    "olhando": "looking", "segurando": "holding", "pegando": "picking up",
+    "abrindo": "opening", "fechando": "closing", "mostrando": "showing",
+    "apontando": "pointing", "tocando": "touching", "bebendo": "drinking",
+    "comendo": "eating", "cozinhando": "cooking", "escrevendo": "writing",
+    "digitando": "typing", "lendo": "reading", "dormindo": "sleeping",
+    "acordando": "waking up", "entrando": "entering", "saindo": "leaving",
+    "subindo": "climbing", "descendo": "descending", "caindo": "falling",
+    "respirando": "breathing", "esperando": "waiting", "trabalhando": "working",
+    "treinando": "working out", "aplicando": "applying", "abracando": "hugging",
+    "lento": "slow", "rapido": "fast", "devagar": "slowly", "forte": "strong",
+    "suave": "soft", "duro": "hard", "quente": "warm", "frio": "cold",
+    "claro": "bright", "escuro": "dark", "limpo": "clean", "sujo": "dirty",
+    "novo": "new", "velho": "old", "grande": "large", "pequeno": "small",
+    "bonito": "beautiful", "elegante": "elegant", "simples": "simple",
+    "luxuoso": "luxurious", "moderno": "modern", "antigo": "vintage",
+    "molhado": "wet", "seco": "dry", "brilhante": "shiny", "fosco": "matte",
+    "colorido": "colorful", "neutro": "neutral", "vazio": "empty", "cheio": "full",
+    "manha": "morning", "tarde": "afternoon", "noite": "night",
+    "madrugada": "late night", "amanhecer": "dawn", "anoitecer": "dusk",
+    "dia": "day", "hoje": "today", "segundo": "second", "segundos": "seconds",
+    "camera": "camera", "lente": "lens", "plano": "shot", "cena": "scene",
+    "corte": "cut", "transicao": "transition", "zoom": "zoom", "foco": "focus",
+    "fundo": "background", "primeiro plano": "foreground", "angulo": "angle",
+    "e": "and", "ou": "or", "com": "with", "sem": "without", "em": "in",
+    "no": "in the", "na": "in the", "do": "of the", "da": "of the",
+    "de": "of", "para": "to", "por": "through", "sobre": "over", "sob": "under",
+    "entre": "between", "atras": "behind", "frente": "front", "ao lado": "beside",
+    "dentro": "inside", "fora": "outside", "perto": "close to", "longe": "far from",
+    "um": "a", "uma": "a", "o": "the", "a": "the", "os": "the", "as": "the",
+    "seu": "his", "sua": "her", "meu": "my", "minha": "my", "muito": "very",
+    "pouco": "slightly", "mais": "more", "menos": "less", "enquanto": "while",
+    "depois": "then", "antes": "before", "quando": "when", "tudo": "everything",
+}
+
+# --- ampliacao: aparencia, materiais, adjetivos e verbos usados em descricao ---
+GLOSSARY.update({
+    # frases inteiras (tem prioridade por serem mais longas)
+    "na altura do ombro": "shoulder-length", "na altura dos ombros": "shoulder-length",
+    "na altura da cintura": "waist-length", "no nariz": "on the nose",
+    "no rosto": "on the face", "na pele": "on the skin", "nos olhos": "in the eyes",
+    "nas maos": "on the hands", "de corpo inteiro": "full body",
+    "fundo desfocado": "blurred background", "primeiro plano": "foreground",
+    "luz natural": "natural light", "luz dura": "hard light",
+    "camera na mao": "handheld camera", "camera lenta": "slow motion",
+    "pele clara": "fair skin", "pele morena": "brown skin", "pele negra": "dark skin",
+    "cabelo liso": "straight hair", "cabelo ondulado": "wavy hair",
+    "cabelo cacheado": "curly hair", "cabelo crespo": "coily hair",
+    "olhos claros": "light eyes", "olhos escuros": "dark eyes",
+    "sem camisa": "shirtless", "em pe": "standing",
+    # aparencia
+    "anos": "years old", "idade": "age", "barba": "beard", "bigode": "mustache",
+    "sarda": "freckle", "sardas": "freckles", "ruga": "wrinkle", "rugas": "wrinkles",
+    "tatuagem": "tattoo", "cicatriz": "scar", "sobrancelha": "eyebrow",
+    "cilios": "eyelashes", "iris": "iris", "bochecha": "cheek", "queixo": "chin",
+    "testa": "forehead", "nariz": "nose", "orelha": "ear", "pescoco": "neck",
+    "cintura": "waist", "quadril": "hips", "joelho": "knee", "tornozelo": "ankle",
+    "punho": "wrist", "unha": "nail", "coque": "bun", "franja": "bangs",
+    "trança": "braid", "tranca": "braid", "rabo de cavalo": "ponytail",
+    "maquiagem": "makeup", "batom nude": "nude lipstick", "brilho labial": "lip gloss",
+    "altura": "length", "ombro": "shoulder",
+    # materiais e cenario
+    "planta": "plant", "vaso": "vase", "cortina": "curtain", "linho": "linen",
+    "madeira": "wood", "metal": "metal", "vidro": "glass", "concreto": "concrete",
+    "tijolo": "brick", "marmore": "marble", "couro": "leather", "seda": "silk",
+    "algodao": "cotton", "la": "wool", "tecido": "fabric", "renda": "lace",
+    "plastico": "plastic", "papelao": "cardboard", "tapete": "rug",
+    "prateleira": "shelf", "balcao": "counter", "pia": "sink", "fogao": "stove",
+    "geladeira": "fridge", "abajur": "lamp shade", "quadro": "framed picture",
+    "bancada": "countertop", "poltrona": "armchair", "almofada": "cushion",
+    # cores
+    "preto": "black", "preta": "black", "branco": "white", "branca": "white",
+    "vermelho": "red", "vermelha": "red", "azul": "blue", "verde": "green",
+    "amarelo": "yellow", "amarela": "yellow", "laranja": "orange",
+    "roxo": "purple", "roxa": "purple", "rosa": "pink", "cinza": "gray",
+    "marrom": "brown", "bege": "beige", "dourado": "golden", "dourada": "golden",
+    "prateado": "silver", "prateada": "silver", "nude": "nude",
+    # adjetivos
+    "ondulado": "wavy", "ondulada": "wavy", "liso": "straight", "lisa": "straight",
+    "cacheado": "curly", "cacheada": "curly", "crespo": "coily", "crespa": "coily",
+    "curto": "short", "curta": "short", "comprido": "long", "comprida": "long",
+    "longo": "long", "longa": "long", "loiro": "blonde", "loira": "blonde",
+    "moreno": "brown", "morena": "brown", "negro": "dark", "negra": "dark",
+    "magro": "slim", "magra": "slim", "forte": "strong", "alto": "tall",
+    "alta": "tall", "baixo": "short", "baixa": "short", "jovem": "young",
+    "velha": "old", "leve": "light", "leves": "light", "intenso": "intense",
+    "intensa": "intense", "suave": "soft", "aspero": "rough", "macio": "soft",
+    "brilhoso": "glossy", "opaco": "matte", "transparente": "transparent",
+    "desfocado": "blurred", "desfocada": "blurred", "nitido": "sharp",
+    "nitida": "sharp", "detalhado": "detailed", "detalhada": "detailed",
+    "realista": "realistic", "minimalista": "minimalist", "industrial": "industrial",
+    "rustico": "rustic", "aconchegante": "cozy", "amplo": "spacious",
+    "estreito": "narrow", "profundo": "deep", "raso": "shallow",
+    "audivel": "audible", "proximo": "close", "proxima": "close",
+    "distante": "distant", "lateral": "side", "frontal": "frontal",
+    "traseiro": "rear", "redondo": "round", "quadrado": "square",
+    "fino": "thin", "grosso": "thick", "pesado": "heavy", "sujo": "dirty",
+    "molhada": "wet", "seca": "dry", "quente": "warm", "fria": "cold",
+    "escura": "dark", "clara": "light", "colorida": "colorful",
+    "elegante": "elegant", "simples": "simple", "caro": "expensive",
+    "antiga": "vintage", "moderna": "modern", "natural": "natural",
+    "artificial": "artificial", "volumetrico": "volumetric",
+    "cinematografico": "cinematic", "cinematografica": "cinematic",
+    # verbos / acoes extras
+    "separando": "separating", "refletindo": "reflecting", "escorrendo": "running down",
+    "brilhando": "glowing", "pingando": "dripping", "voando": "flying",
+    "girando no ar": "spinning in the air", "flutuando": "floating",
+    "caminhando": "walking", "levantando": "lifting", "ajustando": "adjusting",
+    "aplicando creme": "applying cream", "balancando": "swaying",
+    "respirando fundo": "taking a deep breath", "piscando": "blinking",
+    "inclinando": "tilting", "apoiando": "leaning", "esperando na fila": "waiting in line",
+    "revelando": "revealing", "cortando": "slicing", "servindo": "pouring",
+    "misturando": "mixing", "provando": "tasting",
+    # ligacoes que faltavam
+    "ao": "at the", "aos": "at the", "nas": "in the", "nos": "in the",
+    "das": "of the", "dos": "of the", "pelo": "through the", "pela": "through the",
+    "num": "in a", "numa": "in a", "deste": "of this", "desta": "of this",
+    "este": "this", "esta": "this", "esse": "that", "essa": "that",
+    "aquele": "that", "aquela": "that", "seus": "their", "suas": "their",
+    "meus": "my", "minhas": "my", "dele": "his", "dela": "her",
+    "ondas soltas": "loose waves", "make natural": "natural makeup",
+    "separando do fundo": "separating from the background",
+    "onda": "wave", "ondas": "waves", "solto": "loose", "soltas": "loose",
+    "make": "makeup", "preso": "tied back", "presa": "tied back",
+    "microfone": "microphone", "condensacao": "condensation", "gota": "drop",
+    "gotas": "drops", "piso": "floor", "respiracao": "breathing",
+    "vinco": "crease", "poro": "pore", "poros": "pores", "suor": "sweat",
+    "lagrima": "tear", "espuma": "foam", "bolha": "bubble", "faisca": "spark",
+    "nevoa": "mist", "neblina": "fog", "orvalho": "dew", "arco-iris": "rainbow",
+    "muito suave": "very soft", "bem": "well", "ja": "already",
+    "entao": "then", "tambem": "also", "apenas": "only", "cada": "each",
+})
+
+# Regras aplicadas ANTES do glossario (regex)
+PRE_RULES = [
+    (r"\bde (\d+)\s*anos\b", r"\1 years old"),
+    (r"\bcom (\d+)\s*anos\b", r"\1 years old"),
+    (r"\b(\d+)\s*anos\b", r"\1 years old"),
+    (r"\bmeia[- ]idade\b", "middle-aged"),
+    (r"\bprimeiro\s+plano\b", "foreground"),
+    (r"\bsegundo\s+plano\b", "background"),
+]
+
+# Para reordenar "substantivo + adjetivo" (PT) -> "adjetivo + substantivo" (EN)
+ADJECTIVES_EN = {
+    "black", "white", "red", "blue", "green", "yellow", "orange", "purple", "pink",
+    "gray", "brown", "beige", "golden", "silver", "nude", "wavy", "straight",
+    "curly", "coily", "short", "long", "blonde", "slim", "strong", "tall",
+    "young", "old", "light", "intense", "soft", "rough", "glossy", "matte",
+    "transparent", "blurred", "sharp", "detailed", "realistic", "minimalist",
+    "industrial", "rustic", "cozy", "spacious", "narrow", "deep", "shallow",
+    "audible", "close", "distant", "side", "frontal", "rear", "round", "square",
+    "thin", "thick", "heavy", "dirty", "clean", "wet", "dry", "warm", "cold",
+    "dark", "colorful", "elegant", "simple", "expensive", "vintage", "modern",
+    "natural", "artificial", "volumetric", "cinematic", "fair", "bright",
+    "beautiful", "luxurious", "large", "small", "new", "empty", "full",
+    "shiny", "fast", "slow", "cheerful", "calm",
+    "shoulder-length", "waist-length", "middle-aged", "shirtless", "blurry",
+}
+NOUNS_EN = {
+    "hair", "skin", "face", "eye", "eyes", "mouth", "lips", "hand", "hands",
+    "leg", "legs", "foot", "feet", "arm", "arms", "shoulder", "shoulders",
+    "beard", "mustache", "freckles", "wrinkles", "tattoo", "scar", "eyebrow",
+    "eyelashes", "cheek", "chin", "forehead", "nose", "ear", "neck", "waist",
+    "hips", "knee", "ankle", "wrist", "nail", "bun", "bangs", "braid",
+    "ponytail", "makeup", "plant", "vase", "curtain", "linen", "wood", "metal",
+    "glass", "concrete", "brick", "marble", "leather", "silk", "cotton", "wool",
+    "fabric", "lace", "plastic", "cardboard", "rug", "shelf", "counter", "sink",
+    "stove", "fridge", "picture", "countertop", "armchair", "cushion", "light",
+    "shadow", "reflection", "glow", "bokeh", "background", "foreground", "wall",
+    "floor", "ceiling", "door", "window", "table", "chair", "bed", "couch",
+    "stairs", "dress", "shirt", "blouse", "trousers", "jeans", "skirt",
+    "jacket", "blazer", "suit", "coat", "belt", "necklace", "earring", "ring",
+    "jewelry", "shoe", "shoes", "sneakers", "handbag", "backpack", "wallet",
+    "smartphone", "phone", "laptop", "computer", "keyboard", "screen",
+    "wristwatch", "glasses", "sunglasses", "perfume", "lipstick", "cream",
+    "moisturizer", "soap", "brush", "towel", "mirror", "water", "fire",
+    "smoke", "steam", "rain", "snow", "wind", "sun", "moon", "sky", "cloud",
+    "clouds", "ocean", "beach", "mountain", "forest", "tree", "flower", "leaf",
+    "petal", "city", "street", "sidewalk", "building", "house", "apartment",
+    "bedroom", "kitchen", "bathroom", "office", "store", "market", "gym",
+    "car", "motorcycle", "bicycle", "food", "dish", "drink", "coffee", "cake",
+    "bread", "fruit", "product", "box", "packaging", "label", "logo", "brand",
+    "money", "card", "key", "book", "paper", "pen", "tool", "woman", "man",
+    "girl", "boy", "person", "model", "child", "baby", "couple", "group",
+    "crowd", "dog", "cat", "horse", "bird", "camera", "lens", "shot", "scene",
+    "microphone", "breath", "gaze", "smile", "breathing", "condensation",
+    "drop", "drops", "sweat", "pore", "pores", "tear", "foam", "spark",
+    "mist", "fog", "dew", "crease", "steam", "glow",
+}
+NOUNS_EN |= {"rim", "key", "fill", "hour", "tone", "detail", "texture"}
+# palavras que servem como substantivo E adjetivo (ex: light): a posicao decide
+AMBIGUOUS_EN = ADJECTIVES_EN & NOUNS_EN
+
+OPTIONS["subject_type"] = [
+    O("Pessoa", "person", "O prompt gira em volta de um ser humano."),
+    O("Produto / objeto", "product", "Nao ha pessoa principal: o heroi e o objeto."),
+    O("Pessoa + produto", "person interacting with the product", "O mais vendedor: gente usando a coisa."),
+    O("Animal", "animal", "Pet ou animal selvagem como sujeito."),
+    O("Paisagem / ambiente", "landscape environment", "Lugar como protagonista, sem sujeito."),
+    O("Grupo de pessoas", "group of people", "Varias pessoas. Cuidado: IA deforma rostos em grupo."),
+    O("Personagem 3D / mascote", "3D character mascot", "Personagem estilizado, nao humano real."),
+]
+
+OPTIONS["negative_preset"] = [O(k, k, "Preenche o campo Negative Prompt com um conjunto pronto.")
+                             for k in NEGATIVE_PRESETS]
+
+# ----------------------------------------------------------------------------
+# ESPECIFICACAO DOS CAMPOS (a UI e gerada a partir daqui)
+# Field(id, label, kind, src, info, default)
+#   kind: entry | text | combo | checks | scale | spin | check
+# ----------------------------------------------------------------------------
+Field = namedtuple("Field", "id label kind src info default")
+
+
+def F(fid, label, kind, src=None, info="", default=""):
+    return Field(fid, label, kind, src, info, default)
+
+
+SECTIONS = [
+    # ---------------------------------------------------------------- SUJEITO
+    ("Personagem", "Identidade do sujeito", [
+        F("subject_type", "Tipo de sujeito", "combo", "subject_type",
+          "Define o que o prompt descreve primeiro. 'Pessoa + produto' e o formato mais usado em anuncio.",
+          "Pessoa + produto"),
+        F("char_id", "ID / nome do personagem", "entry", None,
+          "Um apelido fixo (ex: ANA_01). O compilador repete esse ID em todas as cenas para a IA entender que e a MESMA pessoa. "
+          "Troque so este campo para trocar o personagem de todo o roteiro.", "ANA_01"),
+        F("char_desc", "Descricao fisica", "text", None,
+          "Escreva em 1 ou 2 linhas: idade aparente, tipo de cabelo, tom de pele, formato de rosto, altura, marcas (sarda, tatuagem). "
+          "Seja concreto: 'mulher 28 anos, cabelo preto ondulado na altura do ombro, pele morena, sardas leves no nariz'. "
+          "Quanto mais especifico, mais consistente entre cenas.",
+          "mulher de 28 anos, cabelo preto ondulado na altura do ombro, pele morena clara, sardas leves no nariz"),
+        F("wardrobe", "Vestuario", "combo", "wardrobe",
+          "A roupa muda a classe social e a intencao da cena inteira. Pode digitar livre tambem.",
+          "Blazer bege oversized"),
+        F("hair", "Cabelo / maquiagem", "entry", None,
+          "Detalhe de penteado e make. Ex: 'coque baixo, make natural glow, labios nude'.",
+          "ondas soltas, make natural glow"),
+        F("expression", "Expressao facial (gatilho)", "combo", "expression",
+          "A micro-expressao e o que separa foto viva de boneco. Se a cena tem fala, use 'Boca pronta para falar'.",
+          "Micro-sorriso sutil"),
+        F("action", "Acao / pose padrao", "combo", "action",
+          "Acao padrao do personagem. Cada cena do roteiro pode sobrescrever esta acao.",
+          "Mostrando produto na palma da mao"),
+        F("props", "Objetos em cena (props)", "entry", None,
+          "Objetos que aparecem junto: 'copo de agua, caderno, oculos'. Use as mesmas palavras do roteiro para a IA manter continuidade.",
+          "celular, copo de agua"),
+    ]),
+    # ---------------------------------------------------------------- AMBIENTE
+    ("Ambiente", "Cenario e atmosfera", [
+        F("location", "Local", "combo", "location",
+          "Onde a cena acontece. Pode digitar livre: 'oficina de moto antiga com ferramentas na parede'.",
+          "Apartamento minimalista"),
+        F("location_detail", "Detalhe do cenario", "entry", None,
+          "2 ou 3 elementos concretos que aparecem no fundo. Ex: 'planta grande, cortina de linho, piso de madeira'. "
+          "Isso impede o fundo generico e vazio.",
+          "planta grande, cortina de linho, piso de madeira clara"),
+        F("time_of_day", "Horario", "combo", "time_of_day",
+          "Define a cor e a direcao da luz natural. 'Golden hour' e o mais favoravel para pele.",
+          "Golden hour"),
+        F("weather", "Clima", "combo", "weather", "Tempo/condicao do ar. Afeta reflexo e umidade da cena.", "Ceu limpo"),
+        F("atmosphere", "Atmosfera de particulas", "checks", "atmosphere",
+          "Particulas no ar deixam a luz VISIVEL e criam profundidade. Marque 1 ou 2 no maximo: mais que isso polui a cena.",
+          "Nevoa volumetrica (haze)"),
+        F("bg_detail", "Fundo / profundidade", "entry", None,
+          "Como o fundo se comporta: 'fundo desfocado com luzes da cidade', 'parede lisa sem distracao', 'camadas de profundidade'.",
+          "fundo desfocado com bokeh suave"),
+    ]),
+    # ---------------------------------------------------------------- CAMERA
+    ("Camera", "Corpo, optica e movimento", [
+        F("camera_body", "Tipo de camera", "combo", "camera_body",
+          "A camera define a 'textura' da imagem: cinema suave, nitidez crua ou celular na mao (UGC). "
+          "E o campo que mais muda a credibilidade do video.", "ARRI Alexa Mini LF (cinema suave)"),
+        F("lens", "Lente / distancia focal", "combo", "lens",
+          "A lente define a relacao entre o sujeito e o fundo. Regra rapida: 85mm para rosto, 35mm para narrativa, "
+          "100mm macro para produto, 24mm para mostrar o lugar.", "85mm retrato (fundo cremoso)"),
+        F("aperture", "Abertura / profundidade de campo", "combo", "aperture",
+          "Controla o quanto o fundo desfoca. f/1.4 isola muito mas pode confundir a IA em cena com movimento; "
+          "f/2.8 e o ponto de equilibrio.", "f/2.8 (sujeito isolado, seguro)"),
+        F("shot", "Enquadramento padrao", "combo", "shot",
+          "O corte do corpo no quadro: rosto e olhos, busto, meio corpo, corpo inteiro, pernas, barriga... "
+          "Este e o valor PADRAO; no roteiro cada palavra-chave pode escolher o seu proprio.",
+          "Meio corpo (medium shot)"),
+        F("angle", "Angulo de camera", "combo", "angle",
+          "De onde a camera olha. Angulo baixo da poder, angulo alto da fragilidade, altura do olho e neutro.",
+          "Altura dos olhos (neutro)"),
+        F("camera_move", "Movimento de camera", "combo", "camera_move",
+          "Como a camera se move. Movimento simples = video mais estavel na IA. Orbita e zoom agressivo deformam rosto.",
+          "Push in lento (aproxima)"),
+        F("aspect", "Proporcao / formato", "combo", "aspect",
+          "Formato final do video. 9:16 para Reels/TikTok, 16:9 para YouTube, 2.39:1 para cara de cinema.",
+          "9:16 vertical (Reels/TikTok/Shorts)"),
+        F("fps", "Taxa de quadros (FPS)", "combo", "fps",
+          "24fps = cinema. 30fps = rede social. 60/120fps = slow motion sem travar.", "24 fps (cinema)"),
+    ]),
+    # ---------------------------------------------------------------- LUZ
+    ("Luz & Cor", "Iluminacao, paleta e estilo", [
+        F("light_style", "Estilo de luz", "combo", "light_style",
+          "O desenho da luz. Trocar SO este campo muda o clima de todo o roteiro: "
+          "ring light = review; Rembrandt = drama; neon = noite.", "Luz de janela suave (north light)"),
+        F("light_extra", "Detalhe de luz extra", "entry", None,
+          "Reforcos: 'rim light azul atras', 'rebatedor branco embaixo do rosto', 'luz pratica de abajur no fundo'.",
+          "rim light suave separando do fundo"),
+        F("grading", "Color grading / paleta", "combo", "grading",
+          "A cor final. Teal&Orange = acao; pastel = clean; moody = luxo escuro; neutro = e-commerce.",
+          "Kodak quente nostalgico"),
+        F("style_render", "Estilo de renderizacao", "combo", "style_render",
+          "Define se o resultado e foto real, editorial, 3D, anime ou VHS. E o campo que mais impacta o 'look' bruto.",
+          "Fotorrealista cinematografico"),
+    ]),
+    # ---------------------------------------------------------------- AUDIO
+    ("Audio & Voz", "Locucao, SFX e musica", [
+        F("voice_tone", "Estilo de locucao", "combo", "voice_tone",
+          "O tom da voz. ASMR retem atencao, corporativo da autoridade, influenciador acelera o ritmo. "
+          "Funciona em Sora, Veo e Kling (modelos com audio).", "Conversa amiga (casual)"),
+        F("vo_text", "Texto da locucao (portugues)", "text", None,
+          "Escreva a fala em portugues. Se o tradutor estiver ligado, sai em ingles no prompt final e o original fica salvo no JSON. "
+          "Cada cena do roteiro tambem tem a sua propria fala.", ""),
+        F("sfx", "Efeitos sonoros (SFX)", "checks", "sfx",
+          "Som e metade da sensacao de real. Foley (clique, tecido, passo) faz o video parecer gravado, nao gerado. "
+          "Marque de 2 a 4.", "Foley: tecido / roupa"),
+        F("music", "Trilha / musica", "combo", "music",
+          "A trilha define o ritmo do corte. 'Sem musica' tambem e uma escolha forte quando a voz e o centro.",
+          "Lo-fi minimalista"),
+        F("audio_extra", "Detalhe de audio extra", "entry", None,
+          "Ex: 'respiracao audivel', 'eco de sala grande', 'microfone proximo com graves'.",
+          "respiracao audivel, microfone proximo"),
+    ]),
+    # ---------------------------------------------------------------- MOTOR
+    ("Motor de IA", "Parametros tecnicos de geracao", [
+        F("negative_preset", "Preset de Negative Prompt", "combo", "negative_preset",
+          "Escolha um conjunto pronto de defeitos a evitar. Ao escolher, o campo abaixo e preenchido.",
+          "Padrao (completo)"),
+        F("negative", "Negative Prompt", "text", None,
+          "Lista do que a IA NAO deve gerar: anatomia errada, mao com 6 dedos, texto/marca d'agua, pele plastica, "
+          "flicker e morphing em video. Separe por virgula. Em Midjourney isso vira '--no'.", NEGATIVE_BASE),
+        F("motion", "Motion Strength / Scale (1-10)", "scale", (1, 10),
+          "Intensidade do movimento fisico da cena. 1-3: quase parado, maxima estabilidade. 4-6: movimento natural. "
+          "7-10: acao rapida, com risco real de deformar maos e rosto.", 4),
+        F("consistency", "Consistency Lock - rosto e roupa (0-100)", "scale", (0, 100),
+          "Peso para manter o MESMO rosto e a MESMA roupa entre cenas diferentes. "
+          "Acima de 80 a IA quase nao varia (bom para serie de videos); abaixo de 40 ela improvisa.", 85),
+        F("seed", "Seed (semente deterministica)", "entry", None,
+          "Numero que trava o resultado. Mesma seed + mesmo prompt = mesma imagem. "
+          "Guarde a seed que funcionou para continuar o personagem nas proximas cenas. Vazio = aleatorio.", ""),
+        F("seed_lock", "Travar seed em todas as cenas", "check", None,
+          "Ligado: todas as cenas usam a MESMA seed (personagem consistente). "
+          "Desligado: cada cena recebe seed+1, dando variacao controlada.", True),
+        F("duration", "Duracao por cena (segundos)", "spin", (1, 60),
+          "Duracao de cada cena gerada. Kling e Luma trabalham bem com 5 ou 10 segundos. "
+          "Video longo = junte varias cenas de 5s na edicao.", 5),
+        F("extra_params", "Parametros extras / flags", "entry", None,
+          "Flags cruas que serao anexadas no final (ex: '--style raw --s 250 --chaos 10'). "
+          "Deixe vazio se nao souber: o compilador ja escreve as flags basicas.", ""),
+        F("translate", "Compilar em ingles tecnico (tradutor)", "check", None,
+          "Ligado: voce escreve tudo em portugues e o prompt final sai em ingles tecnico, que e o que os modelos entendem melhor. "
+          "O tradutor usa um glossario cinematografico interno; palavras que ele nao conhece ficam marcadas no aviso.", True),
+    ]),
+]
+
+FIELD_BY_ID: dict[str, Field] = {f.id: f for _, _, fl in SECTIONS for f in fl}
+
+# ----------------------------------------------------------------------------
+# FORMULA / TEMPLATE MESTRE
+# ----------------------------------------------------------------------------
+MASTER_TEMPLATE = (
+    "STYLE: {ESTILO}.\n"
+    "SHOT: {ENQUADRAMENTO}, {ANGULO}.\n"
+    "SUBJECT: {SUJEITO}{ROUPA}{CABELO}, {EXPRESSAO}, {ACAO}{PALAVRA_CHAVE}.\n"
+    "SCENE: {AMBIENTE}, {CENARIO_DETALHE}, {HORARIO}, {CLIMA}, {ATMOSFERA}, {FUNDO}.\n"
+    "CAMERA: {CAMERA}, {LENTE}, {ABERTURA}, {MOVIMENTO}.\n"
+    "LIGHT: {LUZ}, {LUZ_EXTRA}, {COR}.\n"
+    "TECH: {ASPECTO}, {FPS}, {MOTION}, {CONSISTENCIA}, {SEED}.\n"
+    "AUDIO: {VOZ}, {FALA}, {SFX}, {MUSICA}, {AUDIO_EXTRA}."
+)
+
+TOKEN_HELP = [
+    ("{ESTILO}", "style_render", "Estilo de renderizacao (foto real, editorial, 3D, anime...)"),
+    ("{ENQUADRAMENTO}", "shot", "Corte do corpo no quadro - sobrescrito por cada cena do roteiro"),
+    ("{ANGULO}", "angle", "Angulo da camera"),
+    ("{SUJEITO}", "char_id/char_desc", "ID + descricao fisica do personagem"),
+    ("{ROUPA}", "wardrobe", "Vestuario"),
+    ("{CABELO}", "hair", "Cabelo e maquiagem"),
+    ("{EXPRESSAO}", "expression", "Micro-expressao facial"),
+    ("{ACAO}", "action", "Acao/pose - sobrescrita por cada cena do roteiro"),
+    ("{PALAVRA_CHAVE}", "roteiro", "A palavra-chave daquela cena, integrada na frase"),
+    ("{AMBIENTE}", "location", "Local da cena"),
+    ("{CENARIO_DETALHE}", "location_detail", "Elementos concretos do cenario"),
+    ("{HORARIO}", "time_of_day", "Hora do dia"),
+    ("{CLIMA}", "weather", "Condicao do tempo"),
+    ("{ATMOSFERA}", "atmosphere", "Particulas no ar"),
+    ("{FUNDO}", "bg_detail", "Comportamento do fundo"),
+    ("{CAMERA}", "camera_body", "Corpo de camera"),
+    ("{LENTE}", "lens", "Lente e distancia focal"),
+    ("{ABERTURA}", "aperture", "Abertura e profundidade de campo"),
+    ("{MOVIMENTO}", "camera_move", "Movimento de camera - sobrescrito por cada cena"),
+    ("{LUZ}", "light_style", "Estilo de iluminacao"),
+    ("{LUZ_EXTRA}", "light_extra", "Reforcos de luz"),
+    ("{COR}", "grading", "Color grading"),
+    ("{ASPECTO}", "aspect", "Proporcao de tela"),
+    ("{FPS}", "fps", "Taxa de quadros"),
+    ("{MOTION}", "motion", "Motion strength 1-10"),
+    ("{CONSISTENCIA}", "consistency", "Peso de consistencia de rosto e roupa"),
+    ("{SEED}", "seed", "Semente deterministica"),
+    ("{VOZ}", "voice_tone", "Tom da locucao"),
+    ("{FALA}", "vo_text", "Texto falado - sobrescrito por cada cena"),
+    ("{SFX}", "sfx", "Efeitos sonoros"),
+    ("{MUSICA}", "music", "Trilha"),
+    ("{AUDIO_EXTRA}", "audio_extra", "Detalhe de audio"),
+]
+
+# ----------------------------------------------------------------------------
+# BLOCOS NARRATIVOS PADRAO (cada bloco explica o que escrever dentro)
+# ----------------------------------------------------------------------------
+BEAT_TEMPLATES = [
+    ("The Hook / Abertura (0-3s)",
+     "Os 3 primeiros segundos decidem se a pessoa fica. Escreva aqui a palavra-chave do elemento mais "
+     "estranho, bonito ou curioso da sua historia. Enquadramento forte (rosto e olhos ou detalhe macro) "
+     "e movimento rapido. NAO explique nada ainda - provoque."),
+    ("Setup / Contexto (3-8s)",
+     "Mostre ONDE e QUEM. Palavra-chave do ambiente ou da pessoa. Enquadramento mais aberto "
+     "(meio corpo ou plano amplo) para o espectador se localizar. Uma informacao, nao tres."),
+    ("Build / Desenvolvimento (8-18s)",
+     "O problema ou o desejo. Palavra-chave da acao principal. Aqui entra a demonstracao do que "
+     "incomoda ou do que se quer. Movimento de camera que aproxima (push in) aumenta a tensao."),
+    ("Reveal / Clímax (18-25s)",
+     "A virada: o produto, a solucao, a resposta. Palavra-chave do produto. Use enquadramento de "
+     "detalhe (maos / insert) e a luz mais bonita do roteiro. E o frame que vira a thumbnail."),
+    ("Proof / Demonstracao (25-35s)",
+     "Prova concreta: o produto funcionando, o antes/depois, o numero, o depoimento. "
+     "Palavra-chave do resultado. Enquadramento que mostre o efeito sem corte de edicao."),
+    ("The Call / Outro (35-40s)",
+     "A chamada para acao. Palavra-chave do gesto (apontar, clicar, link). Olho direto na lente, "
+     "frase curta e imperativa, e um movimento de camera que afasta (pull out) ou trava. "
+     "Sem CTA o video nao converte, so entretem."),
+]
+
+
+def new_beat(name="Nova cena", info=""):
+    return {
+        "name": name, "info": info, "keyword": "", "shot": "", "angle": "",
+        "move": "", "action": "", "vo": "", "dur": 5, "extra": "", "auto": True,
+    }
+
+
+def default_beats():
+    beats = []
+    seeds = [
+        ("celular",      "Rosto e olhos (extreme close-up)"),
+        ("janela",       "Plano amplo (wide / estabelecimento)"),
+        ("copo de agua", "Meio corpo (medium shot)"),
+        ("produto",      "Maos / detalhe de produto"),
+        ("sorriso",      "Rosto inteiro (close-up)"),
+        ("mao",          "Busto (ombros e rosto)"),
+    ]
+    for (name, info), (kw, shot) in zip(BEAT_TEMPLATES, seeds):
+        b = new_beat(name, info)
+        b["keyword"] = kw
+        b["shot"] = shot
+        beats.append(b)
+    return beats
+
+
+# ----------------------------------------------------------------------------
+# PRESETS EMBUTIDOS
+# ----------------------------------------------------------------------------
+BUILTIN_PRESETS = {
+    "Moda Luxo": {
+        "subject_type": "Pessoa", "wardrobe": "Traje de gala / vestido longo",
+        "camera_body": "ARRI Alexa Mini LF (cinema suave)", "lens": "85mm retrato (fundo cremoso)",
+        "aperture": "f/1.2 - f/1.8 (fundo muito desfocado)", "shot": "Corpo inteiro (full shot)",
+        "angle": "Tres quartos (3/4)", "camera_move": "Orbita 180 graus",
+        "light_style": "Chiaroscuro / noir", "grading": "Moody escuro cinematografico",
+        "style_render": "Editorial de moda (Vogue)", "location": "Estudio fundo infinito",
+        "atmosphere": "Nevoa volumetrica (haze)", "voice_tone": "Sem locucao (so ambiente)",
+        "music": "Ambient drone", "motion": 3, "consistency": 90, "aspect": "2.39:1 cinemascope",
+        "fps": "60 fps (fluido / slow-mo)", "expression": "Neutro confiante",
+        "action": "Girando (fashion spin)",
+    },
+    "Comercial Tech": {
+        "subject_type": "Produto / objeto", "camera_body": "RED V-Raptor 8K (nitidez extrema)",
+        "lens": "100mm macro (textura extrema)", "aperture": "f/4 - f/5.6 (sujeito + fundo proximo)",
+        "shot": "Plano detalhe do objeto (insert)", "angle": "Altura dos olhos (neutro)",
+        "camera_move": "Slider lateral (parallax)", "light_style": "Contraluz dura (rim light)",
+        "grading": "Comercial clean neutro", "style_render": "Comercial 4K produto",
+        "location": "Estudio fundo infinito", "atmosphere": "Ar limpo (sem particula)",
+        "voice_tone": "Corporativa firme e confiante", "music": "Eletronica tensa (techno)",
+        "motion": 5, "consistency": 70, "aspect": "16:9 horizontal (YouTube/TV)",
+        "fps": "60 fps (fluido / slow-mo)", "action": "Segurando e girando o produto",
+    },
+    "Vlog UGC": {
+        "subject_type": "Pessoa + produto", "wardrobe": "Camiseta branca basica",
+        "camera_body": "iPhone 16 Pro Max na mao (UGC)", "lens": "24mm wide (ambiente)",
+        "aperture": "f/2.8 (sujeito isolado, seguro)", "shot": "Busto (ombros e rosto)",
+        "angle": "Altura dos olhos (neutro)", "camera_move": "Handheld documental",
+        "light_style": "Luz de janela suave (north light)", "grading": "Pastel suave baixo contraste",
+        "style_render": "Documental cru", "location": "Apartamento minimalista",
+        "atmosphere": "Ar limpo (sem particula)", "voice_tone": "Influenciador energico e rapido",
+        "music": "Pop energetico", "motion": 6, "consistency": 80,
+        "aspect": "9:16 vertical (Reels/TikTok/Shorts)", "fps": "30 fps (social media)",
+        "expression": "Boca pronta para falar (lip-sync)", "action": "Mostrando produto na palma da mao",
+    },
+    "Beleza / Skincare": {
+        "subject_type": "Pessoa + produto", "wardrobe": "Camiseta branca basica",
+        "camera_body": "ARRI Alexa Mini LF (cinema suave)", "lens": "100mm macro (textura extrema)",
+        "aperture": "f/2.8 (sujeito isolado, seguro)", "shot": "Rosto inteiro (close-up)",
+        "angle": "Tres quartos (3/4)", "camera_move": "Push in lento (aproxima)",
+        "light_style": "Ring light / softbox de estudio", "grading": "Pastel suave baixo contraste",
+        "style_render": "Fotorrealista cinematografico", "location": "Banheiro com espelho",
+        "atmosphere": "Vapor de agua / banheiro", "voice_tone": "ASMR sussurrado intimista",
+        "music": "Lo-fi minimalista", "motion": 2, "consistency": 92,
+        "aspect": "9:16 vertical (Reels/TikTok/Shorts)", "fps": "120 fps (super slow motion)",
+        "expression": "Micro-sorriso sutil", "action": "Aplicando produto no rosto",
+    },
+    "Food / Gastronomia": {
+        "subject_type": "Produto / objeto", "camera_body": "RED V-Raptor 8K (nitidez extrema)",
+        "lens": "100mm macro (textura extrema)", "aperture": "f/2.8 (sujeito isolado, seguro)",
+        "shot": "Plano detalhe do objeto (insert)", "angle": "Visao de passaro (top-down)",
+        "camera_move": "Rack focus (troca de foco)", "light_style": "Luz de janela suave (north light)",
+        "grading": "Kodak quente nostalgico", "style_render": "Comercial 4K produto",
+        "location": "Cozinha com luz de janela", "atmosphere": "Vapor de agua / banheiro",
+        "voice_tone": "Sem locucao (so ambiente)", "music": "Lo-fi minimalista",
+        "motion": 4, "consistency": 60, "aspect": "4:5 retrato (feed alto)",
+        "fps": "120 fps (super slow motion)", "action": "Cozinhando / cortando",
+    },
+}
+
+# combinacoes compativeis para o Lucky Roll (sorteio coerente)
+LUCKY_SETS = list(BUILTIN_PRESETS.keys())
+
+PLATFORMS = [
+    ("universal", "Universal / Completo"),
+    ("midjourney", "Midjourney v6/v7"),
+    ("runway", "Runway Gen-3 / Gen-4"),
+    ("kling", "Kling AI"),
+    ("luma", "Luma Dream Machine"),
+    ("sora", "Sora / Hunyuan"),
+    ("veo", "Google Veo 3"),
+    ("shotlist", "Shot List (roteiro cena a cena)"),
+    ("json", "JSON (projeto / API)"),
+]
+
+PLATFORM_NOTES = {
+    "universal": "Formato longo com todos os blocos. Use como fonte de verdade e para modelos que aceitam prompt grande.",
+    "midjourney": "Midjourney ignora audio e nao tem campo negativo: os negativos viram '--no'. Mantenha uma frase densa, sem listas.",
+    "runway": "Runway Gen-3/4 responde melhor a UMA frase curta comecando pelo movimento de camera. Nao tem negative prompt.",
+    "kling": "Kling tem campo separado de Negative Prompt e duracao fixa de 5s ou 10s. Movimento de camera deve ser explicito.",
+    "luma": "Luma gosta de prosa simples e descritiva. Evite listas tecnicas longas e parametros.",
+    "sora": "Sora/Hunyuan aceitam narrativa com cenas e audio descrito. Pode enviar o roteiro inteiro com cabecalhos de cena.",
+    "veo": "Veo 3 gera audio junto: descreva locucao, SFX e ambiente. Dialogo entre aspas sai como fala sincronizada.",
+    "shotlist": "Uma linha de prompt pronta por cena do roteiro. Gere cada cena separada e junte na edicao.",
+    "json": "Estrutura completa para reaproveitar em script/API ou para versionar o projeto no git.",
+}
+
+# ============================================================================
+#  NUCLEO LOGICO  (independente da interface - pode ser importado e testado)
+# ============================================================================
+
+_ACCENTS = str.maketrans("áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ",
+                         "aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC")
+
+
+def deaccent(txt: str) -> str:
+    return (txt or "").translate(_ACCENTS)
+
+
+def opt_list(src: str) -> list[str]:
+    return [o.label for o in OPTIONS.get(src, [])]
+
+
+def opt_info(src: str, label: str) -> str:
+    for o in OPTIONS.get(src, []):
+        if o.label == label:
+            return o.info
+    return ""
+
+
+def en_of(src: str | None, label: str) -> str:
+    """Traduz o label escolhido para o termo tecnico em ingles.
+    Se o usuario digitou algo fora do catalogo, o texto dele e usado como esta."""
+    label = (label or "").strip()
+    if not label:
+        return ""
+    for o in OPTIONS.get(src or "", []):
+        if o.label == label:
+            return o.en
+    return label
+
+
+# --------------------------------------------------------------------------
+# TRADUTOR PT -> EN (glossario tecnico offline)
+# --------------------------------------------------------------------------
+_GLOSS_KEYS = sorted(GLOSSARY.keys(), key=len, reverse=True)
+_ENGLISH_SAFE = set()
+for _v in GLOSSARY.values():
+    _ENGLISH_SAFE.update(re.findall(r"[a-z]+", _v.lower()))
+for _s in (ADJECTIVES_EN, NOUNS_EN):
+    _ENGLISH_SAFE |= _s
+# termos ingleses que podem aparecer digitados direto pelo usuario
+_ENGLISH_SAFE |= {
+    "the", "and", "with", "of", "in", "on", "at", "a", "an", "to", "from", "by",
+    "shot", "lens", "light", "camera", "close", "wide", "macro", "bokeh", "grade",
+    "cinematic", "photorealistic", "detail", "style", "motion", "seed", "fps",
+    "slow", "fast", "soft", "hard", "handheld", "studio", "neon", "film", "grain",
+    "look", "frame", "focus", "depth", "field", "angle", "view", "mid", "full",
+    "body", "skin", "hair", "product", "scene", "background", "foreground",
+    "very", "slightly", "while", "then", "before", "when", "everything", "each",
+    "also", "only", "already", "well", "this", "that", "their", "his", "her",
+    "my", "years", "old", "middle", "aged", "length", "level",
+}
+_PT_HINT = re.compile(r"(ao$|oes$|aes$|inho$|inha$|mente$|cao$|ndo$|ava$|eiro$|eira$"
+                      r"|^nao$|^sem$|^com$|^que$|^uma$|^dos$|^das$|^pra$|^pro$|lh|nh|ç)")
+
+
+def _roles(tokens: list[str]) -> list[str]:
+    """Classifica cada palavra como N (substantivo), A (adjetivo) ou O (outro).
+    Palavras ambiguas (ex: 'light') sao decididas pela vizinhanca."""
+    def pure(w, s, other):
+        return w in s and w not in other
+    roles = []
+    for i, w in enumerate(tokens):
+        nxt = tokens[i + 1] if i + 1 < len(tokens) else None
+        if w in AMBIGUOUS_EN:
+            if nxt and pure(nxt, ADJECTIVES_EN, NOUNS_EN):
+                roles.append("N")          # 'light soft' -> light e substantivo
+            elif nxt and pure(nxt, NOUNS_EN, ADJECTIVES_EN):
+                roles.append("A")          # 'light freckles' -> light e adjetivo
+            elif nxt is None and roles and roles[-1] == "N":
+                roles.append("A")          # 'freckles light' -> light e adjetivo
+            else:
+                roles.append("N")
+        elif w in NOUNS_EN:
+            roles.append("N")
+        elif w in ADJECTIVES_EN:
+            roles.append("A")
+        else:
+            roles.append("O")
+    return roles
+
+
+def _reorder_adjectives(tokens: list[str]) -> list[str]:
+    """PT escreve 'cabelo preto'; EN escreve 'black hair'. Move os adjetivos
+    para a frente do grupo de substantivos que eles qualificam."""
+    roles = _roles(tokens)
+    out, i, n = [], 0, len(tokens)
+    while i < n:
+        if roles[i] == "N":
+            j = i
+            while j < n and roles[j] == "N":
+                j += 1
+            k = j
+            while k < n and roles[k] == "A":
+                k += 1
+            if k > j:
+                out.extend(tokens[j:k])
+                out.extend(tokens[i:j])
+                i = k
+            else:
+                out.extend(tokens[i:j])
+                i = j
+        else:
+            out.append(tokens[i])
+            i += 1
+    return out
+
+
+def translate_pt(text: str) -> tuple[str, list[str]]:
+    """Traduz com glossario tecnico + reordenacao de adjetivos.
+    Retorna (texto, palavras que ficaram sem traducao)."""
+    if not text or not text.strip():
+        return "", []
+    out = deaccent(text).lower()
+    for pattern, repl in PRE_RULES:
+        out = re.sub(pattern, repl, out)
+    for key in _GLOSS_KEYS:
+        k = deaccent(key).lower()
+        out = re.sub(r"(?<![a-z0-9-])" + re.escape(k) + r"(?![a-z0-9-])", GLOSSARY[key], out)
+
+    # reordena adjetivos dentro de cada trecho separado por pontuacao
+    pieces = re.split(r"([,;.:()\n]|\bof\b|\bwith\b|\bin\b|\bon\b|\bat\b|\band\b)", out)
+    out = ""
+    for idx, p in enumerate(pieces):  # indices pares = texto, impares = separador
+        if idx % 2 == 0:
+            m = re.match(r"^(\s*)(.*?)(\s*)$", p, re.S)
+            lead, core, trail = m.group(1), m.group(2), m.group(3)
+            toks = core.split()
+            core = " ".join(_reorder_adjectives(toks)) if len(toks) > 1 else core
+            out += lead + core + trail
+        else:
+            out += p
+    out = re.sub(r"\s+", " ", out).strip()
+
+    unknown = []
+    for w in re.findall(r"[a-z]{3,}", out):
+        if w in _ENGLISH_SAFE or w in unknown:
+            continue
+        unknown.append(w)
+    return out, unknown
+
+
+# --------------------------------------------------------------------------
+# TRADUTOR ONLINE OPCIONAL
+# Se o pacote 'deep-translator' estiver instalado (pip install deep-translator)
+# a traducao fica completa. Sem ele, o glossario interno e usado.
+# --------------------------------------------------------------------------
+ONLINE = {"enabled": False, "fails": 0}
+
+
+def online_available() -> bool:
+    try:
+        import deep_translator  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def translate_online(text: str) -> str:
+    from deep_translator import GoogleTranslator
+    return GoogleTranslator(source="pt", target="en").translate(text) or text
+
+
+def maybe_translate(text: str, enabled: bool, bag: list[str]) -> str:
+    if not text:
+        return ""
+    if not enabled:
+        return text.strip()
+    if ONLINE["enabled"]:
+        try:
+            return translate_online(text).strip()
+        except Exception:
+            ONLINE["fails"] += 1
+            if "[tradutor online indisponivel - usando glossario]" not in bag:
+                bag.append("[tradutor online indisponivel - usando glossario]")
+    out, unknown = translate_pt(text)
+    for u in unknown:
+        if u not in bag:
+            bag.append(u)
+    return out.strip()
+
+
+def clean_join(parts, sep=", "):
+    return sep.join([p.strip().rstrip(",").strip() for p in parts if p and str(p).strip()])
+
+
+def tidy(text: str) -> str:
+    """Limpa tokens vazios, virgulas duplicadas e espacos."""
+    text = re.sub(r"\{[A-Z_]+\}", "", text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"(,\s*){2,}", ", ", text)
+    text = re.sub(r"\(\s*\)", "", text)
+    lines = []
+    for line in text.split("\n"):
+        line = line.strip()
+        line = re.sub(r"^([A-Z]+:)\s*,\s*", r"\1 ", line)
+        line = re.sub(r",\s*\.", ".", line)
+        line = re.sub(r"\s+,", ",", line)
+        line = re.sub(r"^,\s*", "", line)
+        line = re.sub(r",\s*$", "", line)
+        if line in ("", ".") or re.match(r"^[A-Z_]+:\s*[.,]?$", line):
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
+class Compiler:
+    """Transforma o estado da UI em prompts por plataforma."""
+
+    def __init__(self, state: dict, beats: list[dict], template: str):
+        self.s = dict(state)
+        self.beats = [dict(b) for b in beats]
+        self.template = template or MASTER_TEMPLATE
+        self.untranslated: list[str] = []
+        self.tr = bool(self.s.get("translate", True))
+
+    # ---------------------------------------------------------------- helpers
+    def g(self, fid, default=""):
+        v = self.s.get(fid, default)
+        return v if v is not None else default
+
+    def en(self, fid):
+        f = FIELD_BY_ID.get(fid)
+        return en_of(f.src if f else None, str(self.g(fid)))
+
+    def en_multi(self, fid):
+        f = FIELD_BY_ID.get(fid)
+        vals = self.g(fid) or []
+        if isinstance(vals, str):
+            vals = [vals] if vals else []
+        return clean_join([en_of(f.src if f else None, v) for v in vals])
+
+    def free(self, fid):
+        return maybe_translate(str(self.g(fid)), self.tr, self.untranslated)
+
+    def seed_for(self, index: int) -> str:
+        raw = str(self.g("seed", "")).strip()
+        if not raw:
+            return ""
+        try:
+            base = int(re.sub(r"\D", "", raw) or 0)
+        except ValueError:
+            return ""
+        if self.g("seed_lock", True):
+            return str(base)
+        return str(base + index)
+
+    def subject(self) -> str:
+        cid = str(self.g("char_id", "")).strip()
+        desc = self.free("char_desc")
+        kind = self.en("subject_type")
+        head = clean_join([kind, desc])
+        if cid:
+            head = "[%s] %s" % (cid, head)
+        return head
+
+    # ---------------------------------------------------------------- tokens
+    def tokens(self, beat: dict | None, index: int = 0) -> dict:
+        b = beat or {}
+        shot = en_of("shot", b.get("shot") or str(self.g("shot")))
+        angle = en_of("angle", b.get("angle") or str(self.g("angle")))
+        move = en_of("camera_move", b.get("move") or str(self.g("camera_move")))
+        action = en_of("action", b.get("action") or str(self.g("action")))
+        kw = b.get("keyword", "").strip()
+        kw_en = maybe_translate(kw, self.tr, self.untranslated)
+        extra = b.get("extra", "").strip()
+        kw_frag = ""
+        if kw_en:
+            kw_frag = ", focus on the %s" % kw_en
+            if extra:
+                kw_frag += ", %s" % extra
+        vo = b.get("vo", "").strip() or str(self.g("vo_text", "")).strip()
+        vo_en = maybe_translate(vo, self.tr, self.untranslated)
+        seed = self.seed_for(index)
+        human = str(self.g("subject_type", "")) in (
+            "Pessoa", "Pessoa + produto", "Grupo de pessoas", "Personagem 3D / mascote")
+        roupa = self.en("wardrobe")
+        cabelo = self.free("hair")
+        return {
+            "{ESTILO}": self.en("style_render"),
+            "{ENQUADRAMENTO}": shot,
+            "{ANGULO}": angle,
+            "{SUJEITO}": self.subject(),
+            "{ROUPA}": (", wearing %s" % roupa) if (roupa and human) else "",
+            "{CABELO}": (", %s" % cabelo) if (cabelo and human) else "",
+            "{EXPRESSAO}": self.en("expression"),
+            "{ACAO}": action,
+            "{PALAVRA_CHAVE}": kw_frag,
+            "{AMBIENTE}": self.en("location"),
+            "{CENARIO_DETALHE}": self.free("location_detail"),
+            "{HORARIO}": self.en("time_of_day"),
+            "{CLIMA}": self.en("weather"),
+            "{ATMOSFERA}": self.en_multi("atmosphere"),
+            "{FUNDO}": self.free("bg_detail"),
+            "{CAMERA}": self.en("camera_body"),
+            "{LENTE}": en_of("lens", b.get("lens") or str(self.g("lens"))),
+            "{ABERTURA}": self.en("aperture"),
+            "{MOVIMENTO}": move,
+            "{LUZ}": self.en("light_style"),
+            "{LUZ_EXTRA}": self.free("light_extra"),
+            "{COR}": self.en("grading"),
+            "{ASPECTO}": "aspect ratio %s" % self.en("aspect"),
+            "{FPS}": self.en("fps"),
+            "{MOTION}": "motion strength %s/10" % self.g("motion", 4),
+            "{CONSISTENCIA}": "character consistency lock %s%% (same face, same outfit)" % self.g("consistency", 85),
+            "{SEED}": ("seed %s" % seed) if seed else "",
+            "{VOZ}": self.en("voice_tone"),
+            "{FALA}": ('voiceover: "%s"' % vo_en) if vo_en else "",
+            "{SFX}": self.en_multi("sfx"),
+            "{MUSICA}": self.en("music"),
+            "{AUDIO_EXTRA}": self.free("audio_extra"),
+            # auxiliares
+            "_props": self.free("props"),
+            "_neg": str(self.g("negative", "")).strip(),
+            "_dur": b.get("dur", self.g("duration", 5)),
+            "_name": b.get("name", ""),
+            "_kw_raw": kw,
+            "_vo_raw": vo,
+            "_seed": seed,
+            "_aspect": self.en("aspect"),
+            "_extra_params": str(self.g("extra_params", "")).strip(),
+        }
+
+    def render(self, beat=None, index=0) -> tuple[str, dict]:
+        t = self.tokens(beat, index)
+        out = self.template
+        for k, v in t.items():
+            if k.startswith("{"):
+                out = out.replace(k, str(v))
+        if t["_props"]:
+            out += "\nPROPS: %s." % t["_props"]
+        return tidy(out), t
+
+    # ---------------------------------------------------------- plataformas
+    def one_line(self, beat=None, index=0) -> tuple[str, dict]:
+        """Versao de 1 paragrafo, sem cabecalhos (para MJ / Runway / Luma)."""
+        full, t = self.render(beat, index)
+        body = " ".join(l.split(":", 1)[-1].strip() if re.match(r"^[A-Z]+:", l) else l
+                        for l in full.split("\n") if not l.startswith("AUDIO:"))
+        body = re.sub(r"\s+", " ", body).strip()
+        return body, t
+
+    def build(self, platform: str) -> str:
+        head = "# %s  |  %s  |  %s\n# %s\n\n" % (
+            APP_NAME, dict(PLATFORMS).get(platform, platform),
+            datetime.datetime.now().strftime("%d/%m/%Y %H:%M"),
+            PLATFORM_NOTES.get(platform, ""))
+
+        if platform == "universal":
+            full, t = self.render(self.beats[0] if self.beats else None, 0)
+            txt = full
+            if t["_neg"]:
+                txt += "\n\nNEGATIVE PROMPT: %s" % t["_neg"]
+            if t["_extra_params"]:
+                txt += "\n\nPARAMS: %s" % t["_extra_params"]
+            txt += "\n\n" + self._shotlist_block()
+            return head + txt
+
+        if platform == "midjourney":
+            body, t = self.one_line(self.beats[0] if self.beats else None, 0)
+            flags = ["--ar %s" % t["_aspect"], "--style raw", "--s 250"]
+            if t["_seed"]:
+                flags.append("--seed %s" % t["_seed"])
+            if t["_neg"]:
+                flags.append("--no %s" % t["_neg"].replace(",", " ").replace("  ", " "))
+            if t["_extra_params"]:
+                flags.append(t["_extra_params"])
+            out = [head + body + " " + " ".join(flags)]
+            for i, b in enumerate(self.beats):
+                if not b.get("keyword"):
+                    continue
+                line, tt = self.one_line(b, i)
+                f = ["--ar %s" % tt["_aspect"], "--style raw", "--s 250"]
+                if tt["_seed"]:
+                    f.append("--seed %s" % tt["_seed"])
+                if tt["_neg"]:
+                    f.append("--no %s" % tt["_neg"].replace(",", " "))
+                out.append("\n/imagine prompt: [%d] %s %s" % (i + 1, line, " ".join(f)))
+            return "\n".join(out)
+
+        if platform == "runway":
+            lines = [head]
+            for i, b in enumerate(self.beats or [None]):
+                t = self.tokens(b, i)
+                scene = clean_join([t["{ENQUADRAMENTO}"], t["{ANGULO}"], t["{SUJEITO}"],
+                                    t["{ACAO}"], t["{PALAVRA_CHAVE}"].lstrip(", "),
+                                    t["{AMBIENTE}"], t["{LUZ}"], t["{COR}"], t["{ESTILO}"]])
+                lines.append("[%d] %s: %s. %s, %s." % (
+                    i + 1, t["{MOVIMENTO}"] or "static shot", scene,
+                    t["{LENTE}"], t["{ABERTURA}"]))
+            lines.append("\n(Runway nao usa negative prompt - os defeitos foram evitados por descricao positiva.)")
+            return "\n".join(lines)
+
+        if platform == "kling":
+            blocks = [head]
+            for i, b in enumerate(self.beats or [None]):
+                t = self.tokens(b, i)
+                dur = 10 if int(t["_dur"] or 5) > 5 else 5
+                body, _ = self.one_line(b, i)
+                blocks.append(
+                    "----- CENA %d  (%s) -----\n"
+                    "Prompt: %s\n"
+                    "Camera movement: %s\n"
+                    "Negative prompt: %s\n"
+                    "Duration: %ds | Mode: Professional | CFG: 0.5 | Aspect: %s"
+                    % (i + 1, t["_name"] or "cena", body, t["{MOVIMENTO}"] or "static",
+                       t["_neg"], dur, t["_aspect"]))
+            return "\n\n".join(blocks)
+
+        if platform == "luma":
+            out = [head]
+            for i, b in enumerate(self.beats or [None]):
+                t = self.tokens(b, i)
+                prose = ("%s. The camera does a %s. %s, %s. %s, %s. %s." % (
+                    clean_join([t["{ENQUADRAMENTO}"], t["{SUJEITO}"], t["{ACAO}"],
+                                t["{PALAVRA_CHAVE}"].lstrip(", ")]),
+                    t["{MOVIMENTO}"] or "static hold", t["{AMBIENTE}"], t["{HORARIO}"],
+                    t["{LUZ}"], t["{COR}"], t["{ESTILO}"]))
+                out.append("[%d] %s" % (i + 1, re.sub(r"\s+", " ", prose)))
+            return "\n\n".join(out)
+
+        if platform in ("sora", "veo"):
+            out = [head]
+            glob = self.tokens(self.beats[0] if self.beats else None, 0)
+            out.append("GLOBAL STYLE: %s | %s | %s | %s" % (
+                glob["{ESTILO}"], glob["{CAMERA}"], glob["{LUZ}"], glob["{COR}"]))
+            out.append("CHARACTER (keep identical in every scene): %s%s%s. %s" % (
+                glob["{SUJEITO}"], glob["{ROUPA}"], glob["{CABELO}"], glob["{CONSISTENCIA}"]))
+            out.append("")
+            for i, b in enumerate(self.beats or [None]):
+                t = self.tokens(b, i)
+                out.append("SCENE %d - %s (%ss)" % (i + 1, t["_name"] or "cena", t["_dur"]))
+                out.append("  Visual: %s" % clean_join(
+                    [t["{ENQUADRAMENTO}"], t["{ANGULO}"], t["{ACAO}"],
+                     t["{PALAVRA_CHAVE}"].lstrip(", "), t["{AMBIENTE}"],
+                     t["{CENARIO_DETALHE}"], t["{ATMOSFERA}"]]))
+                out.append("  Camera: %s, %s, %s" % (t["{MOVIMENTO}"], t["{LENTE}"], t["{ABERTURA}"]))
+                audio = clean_join([t["{VOZ}"], t["{SFX}"], t["{MUSICA}"], t["{AUDIO_EXTRA}"]])
+                out.append("  Audio: %s" % audio)
+                if t["{FALA}"]:
+                    out.append("  Dialogue: %s" % t["{FALA}"].replace("voiceover: ", ""))
+                out.append("")
+            if platform == "veo":
+                out.append("NOTE: Veo 3 generates synced audio - keep dialogue short and inside quotes.")
+            else:
+                out.append("NEGATIVE / AVOID: %s" % glob["_neg"])
+            return "\n".join(out)
+
+        if platform == "shotlist":
+            return head + self._shotlist_block()
+
+        if platform == "json":
+            return head + json.dumps(self.project_dict(), ensure_ascii=False, indent=2)
+
+        return head + "(plataforma desconhecida)"
+
+    def _shotlist_block(self) -> str:
+        rows = ["===================== SHOT LIST ====================="]
+        for i, b in enumerate(self.beats):
+            line, t = self.one_line(b, i)
+            rows.append("\n--- CENA %d | %s | %ss | palavra-chave: %s ---" % (
+                i + 1, t["_name"] or "cena", t["_dur"], t["_kw_raw"] or "-"))
+            rows.append("ENQUADRAMENTO: %s | ANGULO: %s | CAMERA: %s" % (
+                t["{ENQUADRAMENTO}"], t["{ANGULO}"], t["{MOVIMENTO}"]))
+            rows.append("PROMPT: %s" % line)
+            if t["{FALA}"]:
+                rows.append("FALA: %s" % t["{FALA}"])
+        return "\n".join(rows)
+
+    def project_dict(self) -> dict:
+        scenes = []
+        for i, b in enumerate(self.beats):
+            line, t = self.one_line(b, i)
+            scenes.append({
+                "index": i + 1, "name": b.get("name", ""), "keyword_pt": b.get("keyword", ""),
+                "framing": t["{ENQUADRAMENTO}"], "angle": t["{ANGULO}"],
+                "camera_move": t["{MOVIMENTO}"], "lens": t["{LENTE}"],
+                "action": t["{ACAO}"], "duration_s": t["_dur"],
+                "voiceover_pt": b.get("vo", ""), "voiceover_en": t["{FALA}"],
+                "seed": t["_seed"], "prompt": line,
+            })
+        return {
+            "app": APP_NAME, "version": APP_VERSION,
+            "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
+            "template": self.template,
+            "fields": self.s,
+            "negative_prompt": str(self.g("negative", "")),
+            "scenes": scenes,
+            "untranslated_words": self.untranslated,
+        }
+
+# ============================================================================
+#  WIDGETS DE INTERFACE
+# ============================================================================
+
+class Tooltip:
+    """Balao de ajuda ao passar o mouse."""
+
+    def __init__(self, widget, text_fn, delay=350, width=440):
+        self.widget = widget
+        self.text_fn = text_fn if callable(text_fn) else (lambda: text_fn)
+        self.delay = delay
+        self.width = width
+        self.tip = None
+        self.after_id = None
+        widget.bind("<Enter>", self._schedule, add="+")
+        widget.bind("<Leave>", self._hide, add="+")
+        widget.bind("<ButtonPress>", self._hide, add="+")
+
+    def _schedule(self, _=None):
+        self._cancel()
+        self.after_id = self.widget.after(self.delay, self._show)
+
+    def _cancel(self):
+        if self.after_id:
+            try:
+                self.widget.after_cancel(self.after_id)
+            except Exception:
+                pass
+            self.after_id = None
+
+    def _show(self):
+        txt = (self.text_fn() or "").strip()
+        if not txt or self.tip:
+            return
+        x = self.widget.winfo_rootx() + 18
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
+        self.tip = tk.Toplevel(self.widget)
+        self.tip.wm_overrideredirect(True)
+        self.tip.wm_geometry("+%d+%d" % (x, y))
+        self.tip.configure(bg=CLR["accent"])
+        lbl = tk.Label(self.tip, text=txt, justify="left", wraplength=self.width,
+                       bg=CLR["tip_bg"], fg=CLR["fg"], font=FONT,
+                       padx=10, pady=8, bd=0)
+        lbl.pack(padx=1, pady=1)
+
+    def _hide(self, _=None):
+        self._cancel()
+        if self.tip:
+            self.tip.destroy()
+            self.tip = None
+
+
+class InfoIcon(tk.Canvas):
+    """Icone 'i' dentro de um circulo. Hover = balao, clique = janela completa."""
+
+    def __init__(self, parent, title, text, size=16):
+        super().__init__(parent, width=size, height=size, bg=parent["bg"] if "bg" in parent.keys() else CLR["panel"],
+                         highlightthickness=0, bd=0, cursor="hand2")
+        self.title_txt = title
+        self.text = text or "Sem descricao."
+        pad = 1
+        self.circle = self.create_oval(pad, pad, size - pad, size - pad,
+                                       outline=CLR["accent"], width=1, fill=CLR["panel2"])
+        self.letter = self.create_text(size / 2, size / 2 + 0.5, text="i",
+                                       fill=CLR["accent"], font=("Georgia", int(size * 0.62), "bold italic"))
+        Tooltip(self, lambda: "%s\n\n%s" % (self.title_txt, self.text))
+        self.bind("<Button-1>", self.popup)
+        self.bind("<Enter>", lambda e: self.itemconfig(self.circle, fill=CLR["accent"]), add="+")
+        self.bind("<Enter>", lambda e: self.itemconfig(self.letter, fill="#101218"), add="+")
+        self.bind("<Leave>", lambda e: self.itemconfig(self.circle, fill=CLR["panel2"]), add="+")
+        self.bind("<Leave>", lambda e: self.itemconfig(self.letter, fill=CLR["accent"]), add="+")
+
+    def popup(self, _=None):
+        win = tk.Toplevel(self)
+        win.title("Ajuda - %s" % self.title_txt)
+        win.configure(bg=CLR["panel"])
+        win.geometry("560x320")
+        win.transient(self.winfo_toplevel())
+        tk.Label(win, text=self.title_txt, bg=CLR["panel"], fg=CLR["accent"],
+                 font=FONT_H, anchor="w").pack(fill="x", padx=16, pady=(14, 6))
+        frm = tk.Frame(win, bg=CLR["panel"])
+        frm.pack(fill="both", expand=True, padx=16, pady=(0, 10))
+        txt = tk.Text(frm, wrap="word", bg=CLR["field"], fg=CLR["fg"], bd=0,
+                      font=FONT, padx=12, pady=10, relief="flat",
+                      insertbackground=CLR["fg"])
+        sb = ttk.Scrollbar(frm, command=txt.yview)
+        txt.configure(yscrollcommand=sb.set)
+        txt.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+        txt.insert("1.0", self.text)
+        txt.configure(state="disabled")
+        ttk.Button(win, text="Fechar", command=win.destroy).pack(pady=(0, 14))
+
+
+class ScrollFrame(tk.Frame):
+    """Area rolavel com roda do mouse (Windows e Linux)."""
+
+    def __init__(self, parent, **kw):
+        super().__init__(parent, bg=CLR["panel"], **kw)
+        self.canvas = tk.Canvas(self, bg=CLR["panel"], highlightthickness=0, bd=0)
+        self.vsb = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=self.vsb.set)
+        self.vsb.pack(side="right", fill="y")
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.inner = tk.Frame(self.canvas, bg=CLR["panel"])
+        self.win = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
+        self.inner.bind("<Configure>", self._on_conf)
+        self.canvas.bind("<Configure>", self._on_canvas)
+        for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            self.canvas.bind_all(seq, self._wheel, add="+")
+
+    def _on_conf(self, _=None):
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def _on_canvas(self, e):
+        self.canvas.itemconfigure(self.win, width=e.width)
+
+    def _wheel(self, e):
+        try:
+            if not str(self.canvas.winfo_containing(e.x_root, e.y_root)).startswith(str(self.canvas)):
+                pass
+        except Exception:
+            pass
+        if getattr(e, "num", None) == 4:
+            delta = -1
+        elif getattr(e, "num", None) == 5:
+            delta = 1
+        else:
+            delta = -1 if e.delta > 0 else 1
+        try:
+            self.canvas.yview_scroll(delta, "units")
+        except Exception:
+            pass
+
+
+def style_app(root):
+    st = ttk.Style(root)
+    try:
+        st.theme_use("clam")
+    except tk.TclError:
+        pass
+    st.configure(".", background=CLR["panel"], foreground=CLR["fg"], font=FONT,
+                 fieldbackground=CLR["field"], bordercolor=CLR["line"])
+    st.configure("TFrame", background=CLR["panel"])
+    st.configure("TLabel", background=CLR["panel"], foreground=CLR["fg"])
+    st.configure("Dim.TLabel", background=CLR["panel"], foreground=CLR["fg_dim"])
+    st.configure("Head.TLabel", background=CLR["panel"], foreground=CLR["accent"], font=FONT_H)
+    st.configure("TButton", background=CLR["panel2"], foreground=CLR["fg"],
+                 borderwidth=1, focusthickness=0, padding=(10, 5))
+    st.map("TButton", background=[("active", CLR["accent"]), ("pressed", CLR["accent"])],
+           foreground=[("active", "#0e1016"), ("pressed", "#0e1016")])
+    st.configure("Accent.TButton", background=CLR["accent"], foreground="#0e1016", font=FONT_B)
+    st.map("Accent.TButton", background=[("active", "#7bbcff")])
+    st.configure("TNotebook", background=CLR["bg"], borderwidth=0)
+    st.configure("TNotebook.Tab", background=CLR["panel2"], foreground=CLR["fg_dim"],
+                 padding=(14, 7), borderwidth=0)
+    st.map("TNotebook.Tab", background=[("selected", CLR["panel"])],
+           foreground=[("selected", CLR["accent"])])
+    st.configure("TCombobox", fieldbackground=CLR["field"], background=CLR["panel2"],
+                 foreground=CLR["fg"], arrowcolor=CLR["accent"], selectbackground=CLR["field"],
+                 selectforeground=CLR["fg"], padding=4)
+    st.map("TCombobox", fieldbackground=[("readonly", CLR["field"])])
+    st.configure("TEntry", fieldbackground=CLR["field"], foreground=CLR["fg"],
+                 insertcolor=CLR["fg"], padding=4)
+    st.configure("TSpinbox", fieldbackground=CLR["field"], foreground=CLR["fg"],
+                 arrowcolor=CLR["accent"], padding=3)
+    st.configure("TCheckbutton", background=CLR["panel"], foreground=CLR["fg"])
+    st.map("TCheckbutton", background=[("active", CLR["panel"])])
+    st.configure("TScale", background=CLR["panel"], troughcolor=CLR["field"])
+    st.configure("Vertical.TScrollbar", background=CLR["panel2"], troughcolor=CLR["bg"],
+                 arrowcolor=CLR["fg_dim"], bordercolor=CLR["bg"], darkcolor=CLR["panel2"],
+                 lightcolor=CLR["panel2"])
+    st.configure("Horizontal.TScrollbar", background=CLR["panel2"], troughcolor=CLR["bg"],
+                 arrowcolor=CLR["fg_dim"])
+    st.configure("TLabelframe", background=CLR["panel"], foreground=CLR["accent"],
+                 bordercolor=CLR["line"])
+    st.configure("TLabelframe.Label", background=CLR["panel"], foreground=CLR["accent"], font=FONT_B)
+    root.option_add("*TCombobox*Listbox.background", CLR["field"])
+    root.option_add("*TCombobox*Listbox.foreground", CLR["fg"])
+    root.option_add("*TCombobox*Listbox.selectBackground", CLR["accent"])
+    root.option_add("*TCombobox*Listbox.selectForeground", "#0e1016")
+    root.option_add("*TCombobox*Listbox.font", FONT)
+    return st
+
+
+def make_text(parent, height=3, mono=False):
+    t = tk.Text(parent, height=height, wrap="word", bg=CLR["field"], fg=CLR["fg"],
+                insertbackground=CLR["accent"], relief="flat", bd=0,
+                font=FONT_MONO if mono else FONT, padx=8, pady=6,
+                selectbackground=CLR["accent"], selectforeground="#0e1016")
+    return t
+
+# ============================================================================
+#  APLICACAO
+# ============================================================================
+
+class App(tk.Tk):
+
+    def __init__(self):
+        super().__init__()
+        self.title("%s  v%s" % (APP_NAME, APP_VERSION))
+        self.geometry("1320x880")
+        self.minsize(1060, 680)
+        self.configure(bg=CLR["bg"])
+        style_app(self)
+
+        self.vars: dict[str, tk.Variable] = {}
+        self.texts: dict[str, tk.Text] = {}
+        self.checks: dict[str, dict[str, tk.BooleanVar]] = {}
+        self.beats: list[dict] = default_beats()
+        self.beat_vars: list[dict] = []
+        self.out_cache: dict[str, str] = {}
+        self.hint_updaters: list = []
+
+        os.makedirs(PRESET_DIR, exist_ok=True)
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+        self._build_menu()
+        self._build_toolbar()
+
+        self.nb = ttk.Notebook(self)
+        self.nb.pack(fill="both", expand=True, padx=10, pady=(6, 4))
+
+        for tabname in ["Personagem", "Ambiente", "Camera", "Luz & Cor", "Audio & Voz", "Motor de IA"]:
+            self._build_field_tab(tabname)
+        self._build_script_tab()
+        self._build_formula_tab()
+        self._build_output_tab()
+
+        self.status = tk.Label(self, text="Pronto.", anchor="w", bg=CLR["panel2"],
+                               fg=CLR["fg_dim"], font=FONT, padx=12, pady=5)
+        self.status.pack(fill="x", side="bottom")
+
+        self.apply_preset("Vlog UGC", silent=True)
+        self.render_beats()
+        self.say("Preset inicial 'Vlog UGC' carregado. Altere um campo e clique em GERAR PROMPT.")
+
+    # ------------------------------------------------------------------ util
+    def say(self, msg, color=None):
+        self.status.configure(text=msg, fg=color or CLR["fg_dim"])
+
+    # ------------------------------------------------------------------ menu
+    def _build_menu(self):
+        m = tk.Menu(self, bg=CLR["panel"], fg=CLR["fg"], activebackground=CLR["accent"],
+                    activeforeground="#0e1016", bd=0)
+
+        arq = tk.Menu(m, tearoff=0, bg=CLR["panel"], fg=CLR["fg"],
+                      activebackground=CLR["accent"], activeforeground="#0e1016")
+        arq.add_command(label="Novo projeto (limpar)", command=self.new_project)
+        arq.add_command(label="Abrir projeto/preset .json...", command=self.load_preset_file)
+        arq.add_command(label="Salvar projeto/preset .json...", command=self.save_preset_file)
+        arq.add_separator()
+        arq.add_command(label="Exportar prompt .txt...", command=self.export_txt)
+        arq.add_command(label="Exportar projeto completo .json...", command=self.export_json)
+        arq.add_separator()
+        arq.add_command(label="Sair", command=self.destroy)
+        m.add_cascade(label="Arquivo", menu=arq)
+
+        pre = tk.Menu(m, tearoff=0, bg=CLR["panel"], fg=CLR["fg"],
+                      activebackground=CLR["accent"], activeforeground="#0e1016")
+        for name in BUILTIN_PRESETS:
+            pre.add_command(label=name, command=lambda n=name: self.apply_preset(n))
+        m.add_cascade(label="Presets", menu=pre)
+
+        fer = tk.Menu(m, tearoff=0, bg=CLR["panel"], fg=CLR["fg"],
+                      activebackground=CLR["accent"], activeforeground="#0e1016")
+        fer.add_command(label="Lucky Roll (sorteio cinematografico)", command=self.lucky_roll)
+        fer.add_command(label="Gerar nova seed aleatoria", command=self.random_seed)
+        fer.add_command(label="Restaurar blocos narrativos padrao", command=self.reset_beats)
+        fer.add_command(label="Restaurar template da formula", command=self.reset_template)
+        m.add_cascade(label="Ferramentas", menu=fer)
+
+        aju = tk.Menu(m, tearoff=0, bg=CLR["panel"], fg=CLR["fg"],
+                      activebackground=CLR["accent"], activeforeground="#0e1016")
+        aju.add_command(label="Guia rapido", command=self.show_guide)
+        aju.add_command(label="Sobre", command=lambda: messagebox.showinfo(
+            "Sobre", "%s v%s\nCompilador de prompts cinematograficos.\nPython + tkinter, sem dependencias externas."
+            % (APP_NAME, APP_VERSION)))
+        m.add_cascade(label="Ajuda", menu=aju)
+        self.configure(menu=m)
+
+    # --------------------------------------------------------------- toolbar
+    def _build_toolbar(self):
+        bar = tk.Frame(self, bg=CLR["bg"])
+        bar.pack(fill="x", padx=10, pady=(10, 0))
+
+        tk.Label(bar, text="GERADOR DE PROMPT UNIVERSAL", bg=CLR["bg"], fg=CLR["fg"],
+                 font=("Segoe UI", 13, "bold")).pack(side="left")
+        tk.Label(bar, text="  formula unica  ·  voce muda um campo, todo o roteiro muda",
+                 bg=CLR["bg"], fg=CLR["fg_dim"], font=FONT).pack(side="left")
+
+        ttk.Button(bar, text="⚡ GERAR PROMPT", style="Accent.TButton",
+                   command=self.generate).pack(side="right", padx=(8, 0))
+        ttk.Button(bar, text="🎲 Lucky Roll", command=self.lucky_roll).pack(side="right", padx=4)
+
+        self.preset_var = tk.StringVar(value="Vlog UGC")
+        cb = ttk.Combobox(bar, textvariable=self.preset_var, width=20, state="readonly",
+                          values=list(BUILTIN_PRESETS.keys()))
+        cb.pack(side="right", padx=4)
+        cb.bind("<<ComboboxSelected>>", lambda e: self.apply_preset(self.preset_var.get()))
+        tk.Label(bar, text="Preset:", bg=CLR["bg"], fg=CLR["fg_dim"], font=FONT).pack(side="right")
+
+    # ----------------------------------------------------------- abas campos
+    def _build_field_tab(self, tabname):
+        sf = ScrollFrame(self.nb)
+        self.nb.add(sf, text=tabname)
+        for tname, section_title, fields in SECTIONS:
+            if tname != tabname:
+                continue
+            box = ttk.Labelframe(sf.inner, text="  %s  " % section_title)
+            box.pack(fill="x", expand=False, padx=12, pady=(12, 4))
+            grid = tk.Frame(box, bg=CLR["panel"])
+            grid.pack(fill="x", padx=6, pady=8)
+            grid.columnconfigure(1, weight=1)
+            for r, f in enumerate(fields):
+                self._build_field_row(grid, f, r)
+
+    def _build_field_row(self, grid, f: Field, r: int):
+        left = tk.Frame(grid, bg=CLR["panel"])
+        left.grid(row=r * 2, column=0, sticky="nw", padx=(6, 12), pady=(8, 0))
+        tk.Label(left, text=f.label, bg=CLR["panel"], fg=CLR["fg"], font=FONT_B,
+                 anchor="w", justify="left", wraplength=230).pack(side="left")
+        InfoIcon(left, f.label, f.info).pack(side="left", padx=(6, 0))
+
+        cell = tk.Frame(grid, bg=CLR["panel"])
+        cell.grid(row=r * 2, column=1, sticky="ew", padx=(0, 10), pady=(8, 0))
+        cell.columnconfigure(0, weight=1)
+
+        hint = tk.Label(grid, text="", bg=CLR["panel"], fg=CLR["fg_dim"], font=("Segoe UI", 8),
+                        anchor="w", justify="left", wraplength=820)
+        hint.grid(row=r * 2 + 1, column=1, sticky="ew", padx=(2, 10), pady=(1, 6))
+
+        kind = f.kind
+        if kind == "combo":
+            var = tk.StringVar(value=str(f.default))
+            cb = ttk.Combobox(cell, textvariable=var, values=opt_list(f.src))
+            cb.grid(row=0, column=0, sticky="ew")
+            self.vars[f.id] = var
+
+            def upd(*_a, _f=f, _v=var, _h=hint):
+                info = opt_info(_f.src, _v.get())
+                _h.configure(text=("↳ " + info) if info else "↳ valor personalizado (sera usado como esta no prompt)")
+                if _f.id == "negative_preset":
+                    self.set_text("negative", NEGATIVE_PRESETS.get(_v.get(), NEGATIVE_BASE))
+            cb.bind("<<ComboboxSelected>>", upd)
+            cb.bind("<KeyRelease>", upd)
+            self.hint_updaters.append(upd)
+            upd()
+
+        elif kind == "entry":
+            var = tk.StringVar(value=str(f.default))
+            ttk.Entry(cell, textvariable=var).grid(row=0, column=0, sticky="ew")
+            self.vars[f.id] = var
+            hint.grid_remove()
+
+        elif kind == "text":
+            t = make_text(cell, height=4 if f.id in ("negative", "char_desc") else 3)
+            t.grid(row=0, column=0, sticky="ew")
+            t.insert("1.0", str(f.default))
+            self.texts[f.id] = t
+            hint.grid_remove()
+
+        elif kind == "checks":
+            holder = tk.Frame(cell, bg=CLR["panel"])
+            holder.grid(row=0, column=0, sticky="ew")
+            self.checks[f.id] = {}
+            opts = OPTIONS.get(f.src, [])
+            cols = 2
+            for i, o in enumerate(opts):
+                bv = tk.BooleanVar(value=(o.label == f.default))
+                self.checks[f.id][o.label] = bv
+                cell_f = tk.Frame(holder, bg=CLR["panel"])
+                cell_f.grid(row=i // cols, column=i % cols, sticky="w", padx=(0, 14), pady=1)
+                ttk.Checkbutton(cell_f, text=o.label, variable=bv).pack(side="left")
+                InfoIcon(cell_f, o.label, o.info, size=13).pack(side="left", padx=(4, 0))
+            hint.configure(text="↳ marque as opcoes que devem entrar no prompt")
+
+        elif kind == "scale":
+            lo, hi = f.src
+            var = tk.IntVar(value=int(f.default))
+            row = tk.Frame(cell, bg=CLR["panel"])
+            row.grid(row=0, column=0, sticky="ew")
+            row.columnconfigure(0, weight=1)
+            val = tk.Label(row, text=str(f.default), bg=CLR["panel"], fg=CLR["accent"],
+                           font=FONT_B, width=5)
+            sc = ttk.Scale(row, from_=lo, to=hi, orient="horizontal",
+                           command=lambda v, _v=var, _l=val: (_v.set(int(float(v))), _l.configure(text=str(int(float(v))))))
+            sc.set(int(f.default))
+            sc.grid(row=0, column=0, sticky="ew")
+            val.grid(row=0, column=1, padx=(8, 0))
+            self.vars[f.id] = var
+            hint.grid_remove()
+
+        elif kind == "spin":
+            lo, hi = f.src
+            var = tk.IntVar(value=int(f.default))
+            ttk.Spinbox(cell, from_=lo, to=hi, textvariable=var, width=8).grid(row=0, column=0, sticky="w")
+            self.vars[f.id] = var
+            hint.grid_remove()
+
+        elif kind == "check":
+            var = tk.BooleanVar(value=bool(f.default))
+            ttk.Checkbutton(cell, text="ativado", variable=var).grid(row=0, column=0, sticky="w")
+            self.vars[f.id] = var
+            hint.grid_remove()
+
+    # ------------------------------------------------------------ estado
+    def set_text(self, fid, value):
+        t = self.texts.get(fid)
+        if t is not None:
+            t.delete("1.0", "end")
+            t.insert("1.0", value)
+
+    def get_state(self) -> dict:
+        st = {}
+        for fid, f in FIELD_BY_ID.items():
+            if f.kind == "text":
+                st[fid] = self.texts[fid].get("1.0", "end-1c").strip() if fid in self.texts else ""
+            elif f.kind == "checks":
+                st[fid] = [lbl for lbl, v in self.checks.get(fid, {}).items() if v.get()]
+            elif fid in self.vars:
+                st[fid] = self.vars[fid].get()
+            else:
+                st[fid] = f.default
+        return st
+
+    def set_state(self, data: dict):
+        for fid, val in (data or {}).items():
+            f = FIELD_BY_ID.get(fid)
+            if not f:
+                continue
+            if f.kind == "text":
+                self.set_text(fid, str(val))
+            elif f.kind == "checks":
+                for lbl, v in self.checks.get(fid, {}).items():
+                    v.set(lbl in (val if isinstance(val, (list, tuple)) else [val]))
+            elif fid in self.vars:
+                try:
+                    self.vars[fid].set(val)
+                except Exception:
+                    pass
+        self.refresh_hints()
+
+    def refresh_hints(self):
+        """Reaplica as explicacoes dos combos (apos troca de preset/sorteio)."""
+        for fn in self.hint_updaters:
+            try:
+                fn()
+            except Exception:
+                pass
+
+    # =================================================================== ROTEIRO
+    def _build_script_tab(self):
+        wrap = tk.Frame(self.nb, bg=CLR["panel"])
+        self.nb.add(wrap, text="Roteiro ⚡")
+
+        top = tk.Frame(wrap, bg=CLR["panel2"])
+        top.pack(fill="x")
+        inner = tk.Frame(top, bg=CLR["panel2"])
+        inner.pack(fill="x", padx=12, pady=8)
+        tk.Label(inner, text="ROTEIRO POR PALAVRA-CHAVE", bg=CLR["panel2"], fg=CLR["accent"],
+                 font=FONT_H).pack(side="left")
+        InfoIcon(inner, "Como funciona o roteiro",
+                 "Cada bloco abaixo e uma CENA. Voce escreve a palavra-chave ou frase "
+                 "(ex: 'celular', 'copo de agua') e na FRENTE dela escolhe a camera: enquadramento "
+                 "(rosto e olhos, busto, meio corpo, corpo inteiro, pernas, barriga...), angulo, "
+                 "movimento, lente e acao.\n\n"
+                 "Essa escolha define como AQUELA cena sera gravada - e e ela que entra no prompt final "
+                 "daquela cena, sobrescrevendo o padrao da aba Camera.\n\n"
+                 "Palavras-chave ja cadastradas no programa (celular, copo de agua, perfume, batom, tenis, "
+                 "notebook, carro, cabelo, olhos, barriga, pernas, busto, produto, comida...) disparam a "
+                 "sugestao automatica de camera. Enquanto 'auto' estiver marcado a sugestao e aplicada; "
+                 "ao escolher manualmente um enquadramento o 'auto' desliga e a sua escolha manda.").pack(side="left", padx=8)
+
+        ttk.Button(inner, text="+ Adicionar cena", command=self.add_beat).pack(side="right", padx=4)
+        ttk.Button(inner, text="Blocos padrao", command=self.reset_beats).pack(side="right", padx=4)
+        ttk.Button(inner, text="Limpar roteiro", command=self.clear_beats).pack(side="right", padx=4)
+
+        tk.Label(wrap, text="Palavras-chave cadastradas: " + ", ".join(sorted(KEYWORD_TRIGGERS)[:28]) + " ...",
+                 bg=CLR["panel"], fg=CLR["fg_dim"], font=("Segoe UI", 8), anchor="w",
+                 wraplength=1250, justify="left").pack(fill="x", padx=14, pady=(6, 0))
+
+        self.script_sf = ScrollFrame(wrap)
+        self.script_sf.pack(fill="both", expand=True, padx=4, pady=6)
+
+    def _lab(self, parent, text, info, row, col):
+        f = tk.Frame(parent, bg=CLR["panel"])
+        f.grid(row=row, column=col, sticky="w", padx=(6, 8), pady=4)
+        tk.Label(f, text=text, bg=CLR["panel"], fg=CLR["fg"], font=FONT).pack(side="left")
+        if info:
+            InfoIcon(f, text, info, size=13).pack(side="left", padx=(4, 0))
+        return f
+
+    def render_beats(self):
+        for w in self.script_sf.inner.winfo_children():
+            w.destroy()
+        self.beat_vars = []
+        for i, b in enumerate(self.beats):
+            self._beat_card(i, b)
+        self.script_sf._on_conf()
+
+    def _beat_card(self, i, b):
+        card = ttk.Labelframe(self.script_sf.inner, text="  CENA %d  " % (i + 1))
+        card.pack(fill="x", padx=12, pady=6)
+        g = tk.Frame(card, bg=CLR["panel"])
+        g.pack(fill="x", padx=6, pady=6)
+        g.columnconfigure(1, weight=1)
+        g.columnconfigure(3, weight=1)
+
+        v = {
+            "name": tk.StringVar(value=b.get("name", "")),
+            "keyword": tk.StringVar(value=b.get("keyword", "")),
+            "shot": tk.StringVar(value=b.get("shot", "")),
+            "angle": tk.StringVar(value=b.get("angle", "")),
+            "move": tk.StringVar(value=b.get("move", "")),
+            "lens": tk.StringVar(value=b.get("lens", "")),
+            "action": tk.StringVar(value=b.get("action", "")),
+            "vo": tk.StringVar(value=b.get("vo", "")),
+            "extra": tk.StringVar(value=b.get("extra", "")),
+            "dur": tk.IntVar(value=int(b.get("dur", 5) or 5)),
+            "auto": tk.BooleanVar(value=bool(b.get("auto", True))),
+        }
+        self.beat_vars.append(v)
+
+        # linha 0: nome do bloco + navegacao
+        self._lab(g, "Bloco narrativo", b.get("info", "") or "Nome livre desta cena.", 0, 0)
+        ttk.Entry(g, textvariable=v["name"]).grid(row=0, column=1, sticky="ew", padx=(0, 8))
+        nav = tk.Frame(g, bg=CLR["panel"])
+        nav.grid(row=0, column=2, columnspan=2, sticky="e")
+        ttk.Button(nav, text="▲", width=3, command=lambda idx=i: self.move_beat(idx, -1)).pack(side="left", padx=2)
+        ttk.Button(nav, text="▼", width=3, command=lambda idx=i: self.move_beat(idx, 1)).pack(side="left", padx=2)
+        ttk.Button(nav, text="✕", width=3, command=lambda idx=i: self.del_beat(idx)).pack(side="left", padx=2)
+
+        # linha 1: palavra-chave + gatilho
+        self._lab(g, "Palavra-chave / frase",
+                  "A palavra ou frase do seu roteiro que esta cena mostra. Ex: 'celular', 'copo de agua', "
+                  "'batom', 'tenis novo'. Ela entra no prompt como foco da cena e, se estiver cadastrada, "
+                  "dispara automaticamente a escolha de camera.", 1, 0)
+        kw = ttk.Entry(g, textvariable=v["keyword"])
+        kw.grid(row=1, column=1, sticky="ew", padx=(0, 8))
+        hint = tk.Label(g, text="", bg=CLR["panel"], fg=CLR["fg_dim"], font=("Segoe UI", 8),
+                        anchor="w", justify="left", wraplength=430)
+        hint.grid(row=1, column=2, columnspan=2, sticky="ew")
+
+        def on_kw(*_a):
+            raw = deaccent(v["keyword"].get()).strip().lower()
+            trig, found = None, ""
+            if raw in KEYWORD_TRIGGERS:
+                trig, found = KEYWORD_TRIGGERS[raw], raw
+            else:
+                for k in sorted(KEYWORD_TRIGGERS, key=len, reverse=True):
+                    if re.search(r"(?<![a-z])" + re.escape(deaccent(k)) + r"(?![a-z])", raw):
+                        trig, found = KEYWORD_TRIGGERS[k], k
+                        break
+            if trig:
+                hint.configure(text="⚡ gatilho '%s' → %s | %s | %s" % (found, trig.shot, trig.lens, trig.action),
+                               fg=CLR["ok"])
+                if v["auto"].get():
+                    v["shot"].set(trig.shot)
+                    v["lens"].set(trig.lens)
+                    v["action"].set(trig.action)
+                    if trig.extra and not v["extra"].get():
+                        v["extra"].set(trig.extra)
+            else:
+                hint.configure(text="sem gatilho cadastrado - escolha a camera manualmente ao lado",
+                               fg=CLR["fg_dim"])
+        kw.bind("<KeyRelease>", on_kw)
+        kw.bind("<FocusOut>", on_kw)
+
+        # linha 2: enquadramento + angulo
+        self._lab(g, "Enquadramento (camera)",
+                  "Como o corpo e cortado no quadro nesta cena: rosto e olhos, rosto, busto, meio corpo, "
+                  "cowboy, corpo inteiro, barriga, pernas, pes, maos/produto, costas, POV ou insert de objeto. "
+                  "Esta escolha sobrescreve o enquadramento padrao da aba Camera.", 2, 0)
+        cb_shot = ttk.Combobox(g, textvariable=v["shot"], values=opt_list("shot"))
+        cb_shot.grid(row=2, column=1, sticky="ew", padx=(0, 8))
+        self._lab(g, "Angulo", "De onde a camera olha nesta cena.", 2, 2)
+        ttk.Combobox(g, textvariable=v["angle"], values=opt_list("angle")).grid(row=2, column=3, sticky="ew", padx=(0, 8))
+
+        def manual(*_a):
+            v["auto"].set(False)
+        cb_shot.bind("<<ComboboxSelected>>", manual)
+
+        # linha 3: movimento + lente
+        self._lab(g, "Movimento de camera", "Como a camera se move nesta cena. Vazio = usa o padrao da aba Camera.", 3, 0)
+        ttk.Combobox(g, textvariable=v["move"], values=opt_list("camera_move")).grid(row=3, column=1, sticky="ew", padx=(0, 8))
+        self._lab(g, "Lente (opcional)", "Trocar a lente so nesta cena. Vazio = usa a lente padrao.", 3, 2)
+        ttk.Combobox(g, textvariable=v["lens"], values=opt_list("lens")).grid(row=3, column=3, sticky="ew", padx=(0, 8))
+
+        # linha 4: acao + duracao + auto
+        self._lab(g, "Acao / pose", "O que o personagem faz nesta cena. Vazio = usa a acao padrao.", 4, 0)
+        ttk.Combobox(g, textvariable=v["action"], values=opt_list("action")).grid(row=4, column=1, sticky="ew", padx=(0, 8))
+        right = tk.Frame(g, bg=CLR["panel"])
+        right.grid(row=4, column=2, columnspan=2, sticky="w")
+        tk.Label(right, text="Duracao (s)", bg=CLR["panel"], fg=CLR["fg"], font=FONT).pack(side="left", padx=(6, 6))
+        ttk.Spinbox(right, from_=1, to=60, textvariable=v["dur"], width=6).pack(side="left")
+        ttk.Checkbutton(right, text="auto-camera pelo gatilho", variable=v["auto"]).pack(side="left", padx=(14, 0))
+        InfoIcon(right, "auto-camera",
+                 "Marcado: a palavra-chave escolhe o enquadramento, a lente e a acao automaticamente. "
+                 "Ao escolher um enquadramento na mao isto desliga sozinho e a sua escolha passa a mandar.",
+                 size=13).pack(side="left", padx=(4, 0))
+
+        # linha 5: fala
+        self._lab(g, "Fala / locucao (PT)",
+                  "O que e falado nesta cena, em portugues. Sai traduzido no prompt (se o tradutor estiver ligado) "
+                  "e tambem fica salvo no JSON em portugues. Frases curtas funcionam melhor em lip-sync.", 5, 0)
+        ttk.Entry(g, textvariable=v["vo"]).grid(row=5, column=1, columnspan=3, sticky="ew", padx=(0, 8))
+
+        # linha 6: detalhe extra
+        self._lab(g, "Detalhe visual extra",
+                  "Um detalhe exclusivo desta cena: 'gotas de condensacao escorrendo no vidro', "
+                  "'brilho da tela refletindo nos dedos'. E o que da realismo ao plano.", 6, 0)
+        ttk.Entry(g, textvariable=v["extra"]).grid(row=6, column=1, columnspan=3, sticky="ew", padx=(0, 8))
+
+        if b.get("info"):
+            tk.Label(g, text="O que escrever aqui: " + b["info"], bg=CLR["panel"], fg=CLR["fg_dim"],
+                     font=("Segoe UI", 8), anchor="w", justify="left", wraplength=1150
+                     ).grid(row=7, column=0, columnspan=4, sticky="ew", padx=6, pady=(6, 2))
+        on_kw()
+
+    def read_beats(self):
+        for b, v in zip(self.beats, self.beat_vars):
+            b["name"] = v["name"].get()
+            b["keyword"] = v["keyword"].get()
+            b["shot"] = v["shot"].get()
+            b["angle"] = v["angle"].get()
+            b["move"] = v["move"].get()
+            b["lens"] = v["lens"].get()
+            b["action"] = v["action"].get()
+            b["vo"] = v["vo"].get()
+            b["extra"] = v["extra"].get()
+            try:
+                b["dur"] = int(v["dur"].get() or 5)
+            except Exception:
+                b["dur"] = 5
+            b["auto"] = bool(v["auto"].get())
+
+    def add_beat(self):
+        self.read_beats()
+        self.beats.append(new_beat("Cena %d" % (len(self.beats) + 1),
+                                   "Cena livre: escreva a palavra-chave e escolha a camera."))
+        self.render_beats()
+        self.say("Cena adicionada.")
+
+    def del_beat(self, idx):
+        self.read_beats()
+        if len(self.beats) <= 1:
+            self.say("E preciso manter pelo menos uma cena.", CLR["warn"])
+            return
+        self.beats.pop(idx)
+        self.render_beats()
+        self.say("Cena removida.")
+
+    def move_beat(self, idx, delta):
+        self.read_beats()
+        j = idx + delta
+        if 0 <= j < len(self.beats):
+            self.beats[idx], self.beats[j] = self.beats[j], self.beats[idx]
+            self.render_beats()
+
+    def reset_beats(self):
+        self.beats = default_beats()
+        self.render_beats()
+        self.say("Blocos narrativos padrao restaurados (Hook → Setup → Build → Reveal → Proof → The Call/Outro).")
+
+    def clear_beats(self):
+        self.beats = [new_beat("Cena 1", "Escreva a palavra-chave e escolha a camera.")]
+        self.render_beats()
+        self.say("Roteiro limpo.")
+
+    # =================================================================== FORMULA
+    def _build_formula_tab(self):
+        wrap = tk.Frame(self.nb, bg=CLR["panel"])
+        self.nb.add(wrap, text="Formula")
+
+        head = tk.Frame(wrap, bg=CLR["panel2"])
+        head.pack(fill="x")
+        hin = tk.Frame(head, bg=CLR["panel2"])
+        hin.pack(fill="x", padx=12, pady=8)
+        tk.Label(hin, text="FORMULA / TEMPLATE MESTRE", bg=CLR["panel2"], fg=CLR["accent"],
+                 font=FONT_H).pack(side="left")
+        InfoIcon(hin, "Formula mestre",
+                 "Este e o molde do prompt. Tudo entre chaves e um TOKEN que o compilador troca pelo "
+                 "valor dos seus campos.\n\n"
+                 "E por isso que voce altera UM campo (a luz, por exemplo) e todas as cenas mudam juntas: "
+                 "a formula nao muda, so o valor do token.\n\n"
+                 "Voce pode reescrever a ordem das frases, apagar blocos que seu modelo nao usa "
+                 "(ex: tirar AUDIO para Midjourney) ou criar a sua propria estrutura. "
+                 "De duplo clique num token da lista ao lado para inserir no cursor.").pack(side="left", padx=8)
+        ttk.Button(hin, text="Restaurar padrao", command=self.reset_template).pack(side="right")
+
+        body = tk.Frame(wrap, bg=CLR["panel"])
+        body.pack(fill="both", expand=True, padx=12, pady=10)
+        body.columnconfigure(0, weight=3)
+        body.columnconfigure(1, weight=2)
+        body.rowconfigure(1, weight=1)
+
+        tk.Label(body, text="Template (edite livremente):", bg=CLR["panel"], fg=CLR["fg"],
+                 font=FONT_B, anchor="w").grid(row=0, column=0, sticky="w", pady=(0, 4))
+        self.template_text = make_text(body, height=14, mono=True)
+        self.template_text.grid(row=1, column=0, sticky="nsew", padx=(0, 12))
+        self.template_text.insert("1.0", MASTER_TEMPLATE)
+
+        tk.Label(body, text="Tokens disponiveis (duplo clique insere):", bg=CLR["panel"],
+                 fg=CLR["fg"], font=FONT_B, anchor="w").grid(row=0, column=1, sticky="w", pady=(0, 4))
+        tok_wrap = ScrollFrame(body)
+        tok_wrap.grid(row=1, column=1, sticky="nsew")
+        for tok, src, desc in TOKEN_HELP:
+            row = tk.Frame(tok_wrap.inner, bg=CLR["panel"])
+            row.pack(fill="x", padx=6, pady=1)
+            lb = tk.Label(row, text=tok, bg=CLR["panel"], fg=CLR["accent2"], font=FONT_MONO,
+                          cursor="hand2", anchor="w", width=20)
+            lb.pack(side="left")
+            lb.bind("<Double-Button-1>", lambda e, t=tok: self.template_text.insert("insert", t))
+            tk.Label(row, text=desc, bg=CLR["panel"], fg=CLR["fg_dim"], font=("Segoe UI", 8),
+                     anchor="w", justify="left", wraplength=300).pack(side="left", fill="x", expand=True)
+            InfoIcon(row, tok, "Campo de origem: %s\n\n%s" % (src, desc), size=13).pack(side="left", padx=4)
+
+    def reset_template(self):
+        self.template_text.delete("1.0", "end")
+        self.template_text.insert("1.0", MASTER_TEMPLATE)
+        self.say("Template restaurado.")
+
+    # ==================================================================== SAIDA
+    def _build_output_tab(self):
+        wrap = tk.Frame(self.nb, bg=CLR["panel"])
+        self.nb.add(wrap, text="Saida / Exportar")
+
+        bar = tk.Frame(wrap, bg=CLR["panel2"])
+        bar.pack(fill="x")
+        b = tk.Frame(bar, bg=CLR["panel2"])
+        b.pack(fill="x", padx=12, pady=8)
+
+        tk.Label(b, text="Plataforma:", bg=CLR["panel2"], fg=CLR["fg"], font=FONT_B).pack(side="left")
+        self.plat_map = {label: key for key, label in PLATFORMS}
+        self.plat_var = tk.StringVar(value=PLATFORMS[0][1])
+        cb = ttk.Combobox(b, textvariable=self.plat_var, state="readonly", width=30,
+                          values=[lbl for _, lbl in PLATFORMS])
+        cb.pack(side="left", padx=8)
+        cb.bind("<<ComboboxSelected>>", lambda e: self.generate())
+        InfoIcon(b, "Plataformas",
+                 "Cada motor de IA le prompt de um jeito diferente. O compilador reescreve o MESMO projeto "
+                 "no formato de cada um:\n\n" +
+                 "\n\n".join("%s: %s" % (lbl, PLATFORM_NOTES[k]) for k, lbl in PLATFORMS)).pack(side="left")
+
+        ttk.Button(b, text="⚡ Gerar / Atualizar", style="Accent.TButton",
+                   command=self.generate).pack(side="left", padx=(14, 4))
+        ttk.Button(b, text="Copiar", command=self.copy_out).pack(side="left", padx=4)
+        ttk.Button(b, text="Salvar .txt", command=self.export_txt).pack(side="left", padx=4)
+        ttk.Button(b, text="Salvar .json", command=self.export_json).pack(side="left", padx=4)
+
+        self.online_var = tk.BooleanVar(value=False)
+        has_online = online_available()
+        chk = ttk.Checkbutton(b, text="tradutor online", variable=self.online_var,
+                              state=("normal" if has_online else "disabled"))
+        chk.pack(side="right", padx=(4, 0))
+        InfoIcon(b, "Tradutor online (opcional)",
+                 ("Ligado: a traducao do roteiro e feita por servico online (completa, qualquer frase).\n"
+                  "Desligado: usa o glossario cinematografico interno, que funciona offline mas so conhece "
+                  "o vocabulario cadastrado.\n\n"
+                  + ("Pacote 'deep-translator' detectado: a opcao esta disponivel."
+                     if has_online else
+                     "Para habilitar, instale no terminal:\n\n    pip install deep-translator\n\n"
+                     "e reabra o programa. Sem ele, o glossario interno continua funcionando."))
+                 ).pack(side="right", padx=(8, 2))
+
+        self.plat_note = tk.Label(wrap, text="", bg=CLR["panel"], fg=CLR["accent2"], font=("Segoe UI", 8),
+                                  anchor="w", justify="left", wraplength=1250)
+        self.plat_note.pack(fill="x", padx=14, pady=(6, 2))
+
+        holder = tk.Frame(wrap, bg=CLR["panel"])
+        holder.pack(fill="both", expand=True, padx=12, pady=(2, 8))
+        self.out_text = make_text(holder, height=10, mono=True)
+        sb = ttk.Scrollbar(holder, command=self.out_text.yview)
+        self.out_text.configure(yscrollcommand=sb.set)
+        self.out_text.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+
+        self.warn = tk.Label(wrap, text="", bg=CLR["panel"], fg=CLR["warn"], font=("Segoe UI", 8),
+                             anchor="w", justify="left", wraplength=1250)
+        self.warn.pack(fill="x", padx=14, pady=(0, 8))
+
+    # ================================================================== ACOES
+    def compiler(self) -> Compiler:
+        self.read_beats()
+        return Compiler(self.get_state(), self.beats,
+                        self.template_text.get("1.0", "end-1c"))
+
+    def generate(self, switch=True):
+        ONLINE["enabled"] = bool(getattr(self, "online_var", None) and self.online_var.get())
+        comp = self.compiler()
+        key = self.plat_map.get(self.plat_var.get(), "universal")
+        try:
+            txt = comp.build(key)
+        except Exception as exc:
+            messagebox.showerror("Erro ao compilar", "%s: %s" % (type(exc).__name__, exc))
+            return
+        self.out_text.delete("1.0", "end")
+        self.out_text.insert("1.0", txt)
+        self.plat_note.configure(text="ⓘ " + PLATFORM_NOTES.get(key, ""))
+        if comp.untranslated:
+            self.warn.configure(
+                text="Tradutor - revisar: o glossario nao reconheceu estas palavras e elas sairam como estao -> "
+                     + ", ".join(comp.untranslated[:30])
+                     + "   (se alguma estiver em portugues, troque por um sinonimo simples ou escreva direto em ingles)")
+        else:
+            self.warn.configure(text="")
+        if switch:
+            self.nb.select(self.nb.index("end") - 1)
+        self.say("Prompt gerado para %s - %d cena(s)." % (self.plat_var.get(), len(self.beats)), CLR["ok"])
+
+    def copy_out(self):
+        txt = self.out_text.get("1.0", "end-1c")
+        if not txt.strip():
+            self.generate()
+            txt = self.out_text.get("1.0", "end-1c")
+        self.clipboard_clear()
+        self.clipboard_append(txt)
+        self.update_idletasks()
+        self.say("Prompt copiado para a area de transferencia.", CLR["ok"])
+
+    def export_txt(self):
+        txt = self.out_text.get("1.0", "end-1c")
+        if not txt.strip():
+            self.generate()
+            txt = self.out_text.get("1.0", "end-1c")
+        name = "prompt_%s_%s.txt" % (self.plat_map.get(self.plat_var.get(), "out"),
+                                     datetime.datetime.now().strftime("%Y%m%d_%H%M"))
+        path = filedialog.asksaveasfilename(initialdir=OUTPUT_DIR, initialfile=name,
+                                            defaultextension=".txt",
+                                            filetypes=[("Texto", "*.txt"), ("Todos", "*.*")])
+        if not path:
+            return
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(txt)
+        self.say("Salvo em %s" % path, CLR["ok"])
+
+    def export_json(self):
+        comp = self.compiler()
+        data = comp.project_dict()
+        data["beats"] = self.beats
+        name = "projeto_%s.json" % datetime.datetime.now().strftime("%Y%m%d_%H%M")
+        path = filedialog.asksaveasfilename(initialdir=OUTPUT_DIR, initialfile=name,
+                                            defaultextension=".json",
+                                            filetypes=[("JSON", "*.json"), ("Todos", "*.*")])
+        if not path:
+            return
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+        self.say("Projeto salvo em %s" % path, CLR["ok"])
+
+    def save_preset_file(self):
+        self.read_beats()
+        data = {"_type": "gerador-de-prompt-preset", "version": APP_VERSION,
+                "fields": self.get_state(), "beats": self.beats,
+                "template": self.template_text.get("1.0", "end-1c")}
+        path = filedialog.asksaveasfilename(initialdir=PRESET_DIR, defaultextension=".json",
+                                            initialfile="meu_preset.json",
+                                            filetypes=[("JSON", "*.json")])
+        if not path:
+            return
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+        self.say("Preset salvo em %s" % path, CLR["ok"])
+
+    def load_preset_file(self):
+        path = filedialog.askopenfilename(initialdir=PRESET_DIR, filetypes=[("JSON", "*.json"), ("Todos", "*.*")])
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+        except Exception as exc:
+            messagebox.showerror("Erro", "Nao foi possivel ler o arquivo:\n%s" % exc)
+            return
+        self.set_state(data.get("fields", data))
+        if data.get("beats"):
+            self.beats = [dict(new_beat(), **b) for b in data["beats"]]
+            self.render_beats()
+        if data.get("template"):
+            self.template_text.delete("1.0", "end")
+            self.template_text.insert("1.0", data["template"])
+        self.say("Preset carregado de %s" % os.path.basename(path), CLR["ok"])
+
+    def apply_preset(self, name, silent=False):
+        data = BUILTIN_PRESETS.get(name)
+        if not data:
+            return
+        self.set_state(data)
+        if not silent:
+            self.preset_var.set(name)
+            self.say("Preset '%s' aplicado. As cenas do roteiro foram mantidas." % name, CLR["ok"])
+
+    def lucky_roll(self):
+        base = random.choice(LUCKY_SETS)
+        self.set_state(BUILTIN_PRESETS[base])
+        roll = {
+            "camera_move": random.choice(opt_list("camera_move")),
+            "expression": random.choice(opt_list("expression")),
+            "action": random.choice(opt_list("action")),
+            "time_of_day": random.choice(opt_list("time_of_day")),
+            "light_style": random.choice(opt_list("light_style")),
+            "grading": random.choice(opt_list("grading")),
+            "lens": random.choice(opt_list("lens")),
+            "atmosphere": [random.choice(opt_list("atmosphere"))],
+        }
+        self.set_state(roll)
+        self.random_seed()
+        self.say("🎲 Lucky Roll sobre '%s': %s + %s + %s" % (
+            base, roll["lens"], roll["light_style"], roll["grading"]), CLR["accent2"])
+
+    def random_seed(self):
+        if "seed" in self.vars:
+            self.vars["seed"].set(str(random.randint(100000, 999999999)))
+
+    def new_project(self):
+        if not messagebox.askyesno("Novo projeto", "Limpar todos os campos e voltar ao padrao?"):
+            return
+        self.set_state({fid: f.default for fid, f in FIELD_BY_ID.items()})
+        self.beats = default_beats()
+        self.render_beats()
+        self.reset_template()
+        self.out_text.delete("1.0", "end")
+        self.say("Projeto novo.")
+
+    def show_guide(self):
+        win = tk.Toplevel(self)
+        win.title("Guia rapido")
+        win.geometry("760x560")
+        win.configure(bg=CLR["panel"])
+        t = make_text(win, height=10)
+        sb = ttk.Scrollbar(win, command=t.yview)
+        t.configure(yscrollcommand=sb.set)
+        t.pack(side="left", fill="both", expand=True, padx=(14, 0), pady=14)
+        sb.pack(side="right", fill="y", pady=14, padx=(0, 14))
+        t.insert("1.0", GUIDE_TEXT)
+        t.configure(state="disabled")
+
+
+GUIDE_TEXT = """GUIA RAPIDO - GERADOR DE PROMPT UNIVERSAL
+
+1) A FORMULA
+   O programa nao escreve prompt "do zero" a cada vez. Existe UM template (aba Formula)
+   com tokens entre chaves: {SUJEITO}, {CAMERA}, {LUZ}, {ENQUADRAMENTO}...
+   Os campos das abas preenchem esses tokens.
+   Consequencia pratica: para mudar a cena inteira voce altera UM campo.
+   Trocou "Luz de janela" por "Neon cyberpunk"? Todas as cenas mudam de clima juntas.
+   Trocou o ID do personagem e a descricao fisica? O roteiro inteiro troca de ator.
+
+2) ORDEM DE TRABALHO RECOMENDADA
+   Preset (barra de cima)  ->  Personagem  ->  Ambiente  ->  Camera  ->  Luz & Cor
+   ->  Audio  ->  Motor de IA  ->  Roteiro  ->  Saida / Exportar.
+
+3) O ROTEIRO POR PALAVRA-CHAVE
+   Cada cena tem uma palavra-chave ("celular", "copo de agua", "batom") e, na frente dela,
+   a escolha de camera: enquadramento (rosto e olhos / busto / meio corpo / corpo inteiro /
+   barriga / pernas / maos...), angulo, movimento, lente e acao.
+   Palavras ja cadastradas disparam a sugestao automatica (indicador ⚡ verde).
+   Ao escolher o enquadramento na mao, o "auto" desliga e a sua escolha manda.
+
+4) CONSISTENCIA DE PERSONAGEM (o que mais quebra video de IA)
+   - Use sempre o mesmo ID (ex: ANA_01) no campo "ID / nome do personagem".
+   - Mantenha "Consistency Lock" alto (80-95).
+   - Trave a seed: gere uma seed, veja qual funcionou e deixe "Travar seed" ligado.
+   - Nao mude a descricao fisica entre cenas. Mude so enquadramento e acao.
+
+5) MOTION STRENGTH
+   1-3 = quase parado (mais estavel, menos defeito de mao e rosto)
+   4-6 = movimento natural
+   7-10 = acao rapida (deforma mais; use com fps 60/120)
+
+6) NEGATIVE PROMPT
+   Lista do que a IA deve evitar. Em Midjourney vira "--no ...".
+   Runway e Luma nao tem campo negativo: nesses casos o compilador descreve
+   o resultado de forma positiva e ignora a lista.
+
+7) TRADUTOR
+   Escreva em portugues; o compilador exporta em ingles tecnico.
+   O glossario e cinematografico, nao e um tradutor completo: palavras desconhecidas
+   aparecem no aviso vermelho na aba Saida para voce trocar por um sinonimo simples.
+
+8) EXPORTACAO
+   - Universal: tudo, com shot list no fim.
+   - Midjourney: 1 paragrafo + flags (--ar, --style, --s, --seed, --no).
+   - Runway: 1 frase por cena comecando pelo movimento de camera.
+   - Kling: prompt + negative prompt + duracao 5s/10s por cena.
+   - Luma: prosa simples.
+   - Sora / Hunyuan e Veo 3: roteiro com cenas e audio descrito (Veo gera voz sincronizada).
+   - Shot List: uma linha pronta por cena.
+   - JSON: o projeto inteiro para versionar no git ou usar via API.
+
+9) PRESETS
+   Moda Luxo, Comercial Tech, Vlog UGC, Beleza/Skincare e Food ja vem configurados.
+   Salve os seus em Arquivo > Salvar projeto/preset .json (pasta "presets").
+
+10) LUCKY ROLL
+   Sorteia uma combinacao coerente (preset + lente + luz + grading + seed nova).
+   Use quando travar na escolha visual.
+"""
+
+
+def main():
+    app = App()
+    app.mainloop()
+
+
+if __name__ == "__main__":
+    main()
