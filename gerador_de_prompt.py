@@ -800,7 +800,7 @@ SECTIONS += [
         F("physics", "Fisica e detalhes vivos", "checks", "physics",
           "Elementos que se movem de forma realista (cabelo, tecido, liquido, particulas). Marque 2 ou 3.", ""),
     ]),
-    ("Referencias & Texto", "Imagens de referencia e frames", [
+    ("Referencias", "Imagens de referencia e frames", [
         F("ref_mode", "Tipo de referencia", "combo", "ref_mode",
           "Como a imagem de referencia sera usada: personagem, estilo, cenario, produto ou primeiro/ultimo frame. "
           "Kling, Runway, Luma e Veo aceitam imagem de entrada; Midjourney usa --cref / --sref.", ""),
@@ -815,7 +815,7 @@ SECTIONS += [
           "Quanto a IA deve obedecer a referencia. 80+ = copia bem fiel; 30-50 = so inspiracao. "
           "Em Midjourney vira --cw / --sw.", 60),
     ]),
-    ("Referencias & Texto", "Texto na tela", [
+    ("Referencias", "Texto na tela", [
         F("onscreen_text", "Texto que aparece na tela", "text", None,
           "O que fica escrito no video (gancho, preco, nome do produto). IA de video erra letras: prefira textos CURTOS "
           "e, se precisar de texto perfeito, adicione na edicao depois.", ""),
@@ -824,15 +824,18 @@ SECTIONS += [
         F("onscreen_style", "Estilo do texto", "entry", None,
           "Fonte e cor: 'branco, sans-serif grossa, sombra suave', 'amarelo neon'. Opcional.", ""),
     ]),
-    ("Referencias & Texto", "Continuidade entre cenas", [
+    ("Referencias", "Continuidade entre cenas", [
         F("continuity", "Elementos que se repetem em todas as cenas", "text", None,
           "O que NAO pode mudar de uma cena para outra: roupa, objeto na mao, cenario, cor de unha, joia. "
           "Escreva como lista curta. Entra em todas as cenas para a IA manter a coerencia.", ""),
+        F("free_notes", "Trechos livres (sem campo proprio)", "text", None,
+          "Qualquer detalhe que nao cabe nos outros campos. O Importador joga aqui os trechos do prompt original que ele "
+          "nao soube classificar, para nada se perder. Entra no prompt como 'NOTES'.", ""),
         F("hook_b", "Gancho alternativo (variante B)", "entry", None,
           "Palavra-chave alternativa para a cena 1. Na exportacao multi-formato o programa gera a versao A (atual) "
           "e a versao B com este gancho, para testar qual retem mais.", ""),
     ]),
-    ("Marca & Briefing", "Briefing da campanha", [
+    ("Marca", "Briefing da campanha", [
         F("brief_goal", "Objetivo da campanha", "entry", None,
           "Uma frase: vender, gerar lead, lancar produto, aumentar seguidores. Define o tom e a chamada final.", ""),
         F("brief_audience", "Publico", "entry", None,
@@ -842,7 +845,7 @@ SECTIONS += [
         F("cta_text", "Chamada para acao (CTA)", "entry", None,
           "A frase final: 'compre agora', 'link na bio', 'cupom OLA10'. Sem CTA o video nao converte.", ""),
     ]),
-    ("Marca & Briefing", "Identidade da marca", [
+    ("Marca", "Identidade da marca", [
         F("brand_name", "Marca", "entry", None, "Nome da marca. Entra no prompt como contexto da cena.", ""),
         F("product_name", "Produto", "entry", None, "Nome e tipo do produto: 'serum facial vitamina C 30ml'.", ""),
         F("brand_colors", "Cores da marca", "entry", None,
@@ -1525,6 +1528,8 @@ class Compiler:
                 if clean_join([self.en("onscreen_pos"), self.free("onscreen_style")]) else ""))
         if self.free("continuity"):
             L.append("CONTINUITY (identical in every scene): %s." % self.free("continuity"))
+        if self.free("free_notes"):
+            L.append("NOTES: %s." % self.free("free_notes").rstrip(" ."))
         if not compact:
             brief = clean_join([
                 ("goal: %s" % self.free("brief_goal")) if self.free("brief_goal") else "",
@@ -1830,6 +1835,277 @@ def preflight(comp: "Compiler", platform: str) -> list[tuple[str, str]]:
         out.append(("ok", "Tudo certo: nenhum problema encontrado."))
     return out
 
+
+# ----------------------------------------------------------------------------
+# IMPORTADOR DE PROMPT PRONTO
+#   Recebe um prompt escrito por voce (ou por outra IA), em PT ou EN, e distribui
+#   o texto nos campos. O que nao for reconhecido NAO e perdido: vai para os campos
+#   de texto livre ou fica listado no relatorio para voce encaixar na mao.
+# ----------------------------------------------------------------------------
+# frase (EN ou PT, sem acento) -> (campo, inicio do label da opcao)
+IMPORT_ALIASES = [
+    (r"extreme close[- ]?up", "shot", "Rosto e olhos"), (r"close[- ]?up", "shot", "Rosto inteiro"),
+    (r"medium close[- ]?up|chest[- ]up|bust shot|busto", "shot", "Busto (ombros"),
+    (r"medium shot|mid shot|waist[- ]up|plano medio|meio corpo", "shot", "Meio corpo"),
+    (r"cowboy shot|medium full", "shot", "Cowboy"), (r"full[- ]body|full shot|corpo inteiro", "shot", "Corpo inteiro"),
+    (r"wide shot|establishing shot|plano aberto|plano amplo", "shot", "Plano amplo"),
+    (r"over[- ]the[- ]shoulder", "shot", "Over-the-shoulder"), (r"\bpov\b|point of view", "shot", "POV"),
+    (r"eye[- ]level|altura dos olhos", "angle", "Altura dos olhos"),
+    (r"low[- ]angle|contra[- ]?plong", "angle", "Contra-plonge"), (r"high[- ]angle|\bplong", "angle", "Plonge"),
+    (r"dutch angle|tilted", "angle", "Holandes"), (r"top[- ]down|bird'?s[- ]eye|overhead shot", "angle", "Visao de passaro"),
+    (r"three[- ]quarter|3/4 view", "angle", "Tres quartos"), (r"profile view|side profile", "angle", "Perfil"),
+    (r"locked[- ]off|static shot|tripod|camera estatica", "camera_move", "Estatico"),
+    (r"slow push[- ]in|push[- ]in|dolly in", "camera_move", "Push in"), (r"pull[- ]out|dolly out", "camera_move", "Pull out"),
+    (r"orbit|arc shot", "camera_move", "Orbita"), (r"\bpan(ning)?\b", "camera_move", "Pan horizontal"),
+    (r"handheld|camera na mao", "camera_move", "Handheld"), (r"gimbal|steadicam|tracking shot", "camera_move", "Gimbal"),
+    (r"crane", "camera_move", "Crane"), (r"whip pan", "camera_move", "Whip pan"),
+    (r"golden hour|hora dourada", "time_of_day", "Golden hour"), (r"blue hour|dawn|sunrise|amanhecer", "time_of_day", "Amanhecer"),
+    (r"dusk|twilight|crepusculo", "time_of_day", "Crepusculo"), (r"\bnight\b|noite|nighttime", "time_of_day", "Noite"),
+    (r"midday|noon|meio[- ]dia", "time_of_day", "Meio-dia"),
+    (r"rembrandt", "light_style", "Rembrandt"), (r"ring light|softbox", "light_style", "Ring light"),
+    (r"rim light|backlight|contraluz", "light_style", "Contraluz"), (r"neon", "light_style", "Neon"),
+    (r"chiaroscuro|film noir", "light_style", "Chiaroscuro"),
+    (r"window light|soft natural daylight|natural daylight from (large )?windows|luz de janela", "light_style", "Luz de janela"),
+    (r"overcast", "light_style", "Overcast"),
+    (r"teal (and|&) orange", "grading", "Teal"), (r"pastel|muted low[- ]contrast", "grading", "Pastel"),
+    (r"moody|dark cinematic", "grading", "Moody"), (r"black and white|monochrome|preto e branco", "grading", "Preto e branco"),
+    (r"photorealistic|photo[- ]?realistic|fotorrealista|cinematic realism", "style_render", "Fotorrealista"),
+    (r"editorial|vogue", "style_render", "Editorial"), (r"documentary|documental", "style_render", "Documental"),
+    (r"\b8k\b|hyper[- ]?real", "style_render", "Hyperreal"), (r"pixar|3d render", "style_render", "3D render"),
+    (r"anime", "style_render", "Anime"), (r"\bvhs\b", "style_render", "VHS"),
+]
+PERSON_WORDS = r"woman|man|girl|boy|person|model|child|people|couple|mulher|homem|menina|menino|pessoa|crianca|casal|influencer|creator"
+PLACE_WORDS = (r"loft|apartment|room|kitchen|street|studio|office|house|cafe|park|beach|city|bedroom|bathroom|gym|store|shop|"
+               r"ceiling|wall|sofa|couch|window|garden|forest|desert|rooftop|car|stage|apartamento|sala|cozinha|rua|escritorio|"
+               r"casa|praia|cidade|quarto|banheiro|academia|loja|parede|teto|sofa|janela|jardim")
+LIGHT_WORDS = r"light|lighting|spotlight|daylight|shadow|glow|luz|sombra|iluminacao|brilho"
+_IMPORT_STOP = set("with from that this shot camera lens light lighting look style very high low wide angle and the for into "
+                   "over under strong soft natural subtle mode scene frame real time".split())
+
+
+def split_prompts(text: str) -> list[str]:
+    """Separa varios prompts colados juntos. Separadores: linhas de ---- / ==== / ####,
+    rotulos de idioma sozinhos na linha ('portugues', 'english') e titulos numerados
+    curtos ('1. Para Geracao de Video'), que NAO viram prompt."""
+    sep = re.compile(r"(?im)^\s*(?:[-=_#*]{5,}|(?:portugu[eê]s|english|ingl[eê]s|translation|tradu[cç][aã]o)\s*:?"
+                     r"|\d+[.)]\s+[^\n.]{3,90})\s*$")
+    blocks = [p.strip() for p in sep.split(text) if p and len(p.strip()) > 25]
+    return blocks or ([text.strip()] if text.strip() else [])
+
+
+def detect_lang(text: str) -> str:
+    low = " " + deaccent(text.lower()) + " "
+    pt = sum(low.count(w) for w in (" de ", " com ", " uma ", " um ", " em ", " para ", " que ", " na ", " no ", " ao ", " dos ", " muito "))
+    en = sum(low.count(w) for w in (" the ", " with ", " and ", " in a ", " of ", " on ", " to ", " from ", " shot ", " a "))
+    return "pt" if pt > en else "en"
+
+
+_OPT_INDEX: dict = {}
+
+
+def _opt_index():
+    """Para cada opcao do catalogo: palavras 'raras' do termo EN e do label PT, com peso (IDF simples)."""
+    if _OPT_INDEX:
+        return _OPT_INDEX
+    fields = [f for f in FIELD_BY_ID.values()
+              if f.kind in ("combo", "checks") and f.src in OPTIONS
+              and f.id not in ("negative_preset", "subject_type", "ref_mode", "transition")]
+    df: dict[str, int] = {}
+    toks = {}
+    for f in fields:
+        for o in OPTIONS[f.src]:
+            words = {w for w in re.findall(r"[a-z0-9]+", deaccent((o.en + " " + re.sub(r"\(.*?\)", "", o.label)).lower()))
+                     if len(w) >= 4 and w not in _IMPORT_STOP}
+            toks[(f.id, o.label)] = words
+            for w in words:
+                df[w] = df.get(w, 0) + 1
+    for (fid, label), words in toks.items():
+        _OPT_INDEX[(fid, label)] = {w: (1.0 if df[w] == 1 else 0.6 if df[w] <= 3 else 0.25) for w in words}
+    return _OPT_INDEX
+
+
+def parse_prompt(text: str) -> dict:
+    """Analisa UM prompt e devolve {'fields': {...}, 'recognized': [(label, valor, origem)],
+    'leftover': [trechos], 'lang': 'pt'|'en'}."""
+    lang = detect_lang(text)
+    work = text.strip()
+    low = deaccent(work.lower())
+    fields: dict = {}
+    rec: list[tuple[str, str, str]] = []
+    used: list[str] = []          # trechos reconhecidos (para descontar do 'sobrou')
+
+    def put(fid, val, how):
+        if isinstance(val, str):
+            val = val.strip(" .!?;")
+            if FIELD_BY_ID[fid].kind in ("entry", "text") and len(val) > 2 and val[0].isupper() and (
+                    val[1].islower() or re.match(r"(?i)(a|an|the|um|uma)\s", val)):
+                val = val[0].lower() + val[1:]
+        if val in ("", None) or fid in fields:
+            return
+        fields[fid] = val
+        rec.append((FIELD_BY_ID[fid].label, str(val) if not isinstance(val, list) else ", ".join(val), how))
+
+    # --- 1) numeros e flags (alta precisao)
+    m = re.search(r"--ar\s+(\d+:\d+)|\b(\d{1,2}:\d{1,2})\b(?!\d)", low)
+    if m:
+        ratio = m.group(1) or m.group(2)
+        for o in OPTIONS["aspect"]:
+            if o.en == ratio:
+                put("aspect", o.label, "proporcao")
+                used.append(m.group(0))
+    elif re.search(r"\bvertical\b", low):
+        put("aspect", OPTIONS["aspect"][0].label, "'vertical'")
+    m = re.search(r"(\d{2,3})\s*-?\s*fps", low)
+    if m:
+        for o in OPTIONS["fps"]:
+            if o.label.startswith(m.group(1)):
+                put("fps", o.label, "fps")
+                used.append(m.group(0))
+    m = re.search(r"(\d{2,3})\s*mm\b", low)
+    if m:
+        for o in OPTIONS["lens"]:
+            if re.match(r"%s\s*mm" % m.group(1), deaccent(o.label.lower())):
+                put("lens", o.label, "lente")
+                used.append(m.group(0))
+    if "anamorphic" in low or "anamorfic" in low:
+        for o in OPTIONS["lens"]:
+            if "anamorf" in deaccent(o.label.lower()):
+                put("lens", o.label, "lente anamorfica")
+    m = re.search(r"\bf\s*/\s*(\d+(?:\.\d+)?)", low)
+    if m:
+        v = float(m.group(1))
+        pick = None
+        for o in OPTIONS["aperture"]:
+            nums = [float(x) for x in re.findall(r"f/(\d+(?:\.\d+)?)", o.label)]
+            if nums and (min(nums) - 0.01 <= v <= max(nums) + 0.01):
+                pick = o.label
+        if pick is None:
+            pick = min(OPTIONS["aperture"], key=lambda o: abs(float(re.search(r"f/(\d+(?:\.\d+)?)", o.label).group(1)) - v)).label
+        put("aperture", pick, "abertura")
+        used.append(m.group(0))
+    m = re.search(r"--seed\s+(\d+)|\bseed\s*[:=]?\s*(\d{3,})", low)
+    if m:
+        put("seed", m.group(1) or m.group(2), "seed")
+        used.append(m.group(0))
+    m = re.search(r"--no\s+([^-]+?)(?=\s--|$)", work, re.I) or re.search(r"negative prompt\s*:\s*(.+)", work, re.I)
+    if m:
+        put("negative", clean_join([x.strip() for x in re.split(r"[,;]", m.group(1)) if x.strip()]), "negative")
+        used.append(m.group(0))
+    flags = list(dict.fromkeys(re.findall(r"--(?!ar\b|seed\b|no\b)\w+(?:\s+[\w.]+)?", work)))
+    if flags:
+        put("extra_params", " ".join(flags), "flags")
+        used.extend(flags)
+    m = re.search(r"(\d{2})[- ]?(?:year[- ]old|anos)", low)
+    age = m.group(0) if m else ""
+
+    # --- 2) aliases (frases comuns de cinema)
+    for pat, fid, prefix in IMPORT_ALIASES:
+        mm = re.search(pat, low)
+        if not mm or fid in fields:
+            continue
+        for o in OPTIONS.get(FIELD_BY_ID[fid].src, []):
+            if o.label.startswith(prefix):
+                put(fid, o.label, "'%s'" % mm.group(0))
+                used.append(mm.group(0))
+                break
+
+    # --- 3) casamento por palavras raras do catalogo (EN do termo + label PT)
+    words = set(re.findall(r"[a-z0-9]+", low))
+    en_words = set(words)
+    if lang == "pt":
+        try:
+            tr, _unk = translate_pt(work)
+            en_words |= set(re.findall(r"[a-z0-9]+", tr.lower()))
+        except Exception:
+            pass
+    best: dict[str, tuple[float, str, list[str]]] = {}
+    multi: dict[str, list[tuple[float, str]]] = {}
+    for (fid, label), wts in _opt_index().items():
+        hit = [w for w in wts if w in en_words]
+        if not hit:
+            continue
+        score = sum(wts[w] for w in hit)
+        ratio = score / max(sum(wts.values()), 0.01)
+        strict = fid in ("location", "wardrobe", "expression", "action")
+        if score < (2.0 if strict else 1.2) or ratio < (0.6 if strict else 0.34):
+            continue
+        val = score * (0.5 + ratio)
+        if FIELD_BY_ID[fid].kind == "checks":
+            multi.setdefault(fid, []).append((val, label))
+        elif fid not in best or val > best[fid][0]:
+            best[fid] = (val, label, hit)
+        used.extend(hit)
+    for fid, (_v, label, hit) in best.items():
+        put(fid, label, "~aproximado, por palavras: " + ", ".join(hit[:3]))
+    for fid, lst in multi.items():
+        lst.sort(reverse=True)
+        put(fid, [l for _v, l in lst[:4]], "palavras do catalogo")
+
+    # --- 4) tipo de sujeito
+    has_person = re.search(r"\b(%s)\b" % PERSON_WORDS, low)
+    if has_person:
+        put("subject_type", "Pessoa", "palavra de pessoa")
+
+    # --- 5) frases: o que sobrou vai para texto livre
+    clean = re.sub(r"--\w+(?:\s+[\w.:]+)?|\bf\s*/\s*\d+(?:\.\d+)?|\b\d{2,3}\s*mm\b(?:\s+(?:lens|lente))?|"
+                   r"\b\d{2,3}\s*-?\s*fps\b|\b8k\b|\(?\b\d{1,2}:\d{1,2}\b\)?", " ", work, flags=re.I)
+    clean = re.sub(r"\s{2,}", " ", re.sub(r"\s+([,.])", r"\1", clean))
+    clauses = [c.strip() for c in re.split(r"(?<=[.!?])\s+|\n+", clean) if c.strip()]
+    used_low = [deaccent(u.lower()) for u in used if len(u) > 2]
+    leftover: list[str] = []
+    for cl in clauses:
+        cl_l = deaccent(cl.lower())
+        if re.fullmatch(r"[\d\s:.\-]*", cl_l):
+            continue
+        parts = [p.strip() for p in re.split(r",(?![^()]*\))", cl) if p.strip()]
+        keep = []
+        for p in parts:
+            pl = deaccent(p.lower())
+            tokens = [w for w in re.findall(r"[a-z0-9]+", pl) if len(w) >= 4 and w not in _IMPORT_STOP]
+            matched = [w for w in tokens if w in used_low or any(w in u for u in used_low)]
+            if tokens and len(matched) / len(tokens) >= 0.6:
+                continue                      # trecho ja coberto por um campo reconhecido
+            keep.append(p)
+        if not keep:
+            continue
+        rest = ", ".join(keep).strip(" ,")
+        if re.search(r"\b(%s)\b" % PERSON_WORDS, deaccent(rest.lower())) and "char_desc" not in fields:
+            rest = rest.rstrip(" .!?")
+            # cenario: ultimo ' in a ... <lugar>' da frase
+            cuts = [m_ for m_ in re.finditer(r"\s(?:in|at|inside|em|no|na)\s+(?:a|an|the|um|uma)\s+", rest, re.I)]
+            for m_ in reversed(cuts):
+                tail = rest[m_.end():]
+                if re.search(r"\b(%s)\b" % PLACE_WORDS, deaccent(tail.lower())) and not re.search(
+                        r"\b(%s)\b" % PERSON_WORDS, deaccent(tail.lower())):
+                    put("location_detail", tail.strip(), "frase do cenario")
+                    rest = rest[:m_.start()].strip(" ,")
+                    break
+            # roupa
+            wm = re.search(r"(?:wearing|dressed in|vestindo|veste|usando)\s+((?:[\w-]+\s+){0,5}?[\w-]+?)"
+                           r"(?=,|$|\s(?:talking|standing|sitting|walking|holding|looking|smiling|falando|em pe|sentad\w+)\b)", rest, re.I)
+            if not wm:
+                wm = re.search(r"\b(?:in|em)\s+(?:an?\s+|um\s+|uma\s+)?((?:[\w-]+\s+){0,4}(?:romper|bodysuit|dress|shirt|t-shirt|jacket|blazer|suit|"
+                               r"hoodie|jeans|coat|macacao|vestido|camiseta|jaqueta|terno|body|top|skirt|saia)\b)", rest, re.I)
+            if wm:
+                put("wardrobe", wm.group(1).strip(), "roupa na frase")
+                rest = (rest[:wm.start()] + rest[wm.end():]).strip(" ,")
+            rest = re.sub(r"^(?:an?\s+)?(?:realistic\s+|photorealistic\s+)?(?:vertical\s+|horizontal\s+)?(?:photo|video|image|picture|shot|foto|video|imagem)\s+"
+                          r"(?:of|de|em formato vertical de)\s+(?:an?\s+|uma?\s+)?", "", rest, flags=re.I)
+            put("char_desc", re.sub(r"\s{2,}", " ", re.sub(r"\s+,", ",", rest)).strip(" ,"), "frase da pessoa")
+        elif re.search(r"\b(%s)\b" % LIGHT_WORDS, deaccent(rest.lower())) and "light_extra" not in fields:
+            put("light_extra", rest, "frase de luz")
+        elif re.search(r"\b(%s)\b" % PLACE_WORDS, deaccent(rest.lower())):
+            old = fields.get("location_detail", "")
+            fields["location_detail"] = clean_join([old, rest.rstrip(" .")])
+            if old:
+                rec[:] = [r for r in rec if r[0] != FIELD_BY_ID["location_detail"].label]
+            rec.append((FIELD_BY_ID["location_detail"].label, fields["location_detail"], "frase do cenario"))
+        else:
+            leftover.append(rest)
+    if age and "char_desc" in fields and age not in fields["char_desc"].lower():
+        fields["char_desc"] = clean_join([age.replace("-", " "), fields["char_desc"]])
+    return {"fields": fields, "recognized": rec, "leftover": leftover, "lang": lang}
+
 # ============================================================================
 #  WIDGETS DE INTERFACE
 # ============================================================================
@@ -2064,10 +2340,11 @@ class App(tk.Tk):
         self.nb.pack(fill="both", expand=True, padx=10, pady=(6, 4))
 
         for tabname in ["Personagem", "Ambiente", "Camera", "Luz & Cor", "Audio & Voz", "Motor de IA",
-                        "Referencias & Texto", "Marca & Briefing"]:
+                        "Referencias", "Marca"]:
             self._build_field_tab(tabname)
         self._build_script_tab()
         self._build_dict_tab()
+        self._build_import_tab()
         self._build_formula_tab()
         self._build_output_tab()
 
@@ -2424,6 +2701,169 @@ class App(tk.Tk):
         self.script_sf = ScrollFrame(wrap)
         self.script_sf.pack(fill="both", expand=True, padx=4, pady=6)
 
+    # ------------------------------------------------------------ importar
+    def _build_import_tab(self):
+        wrap = tk.Frame(self.nb, bg=CLR["panel"])
+        self.nb.add(wrap, text="Importar")
+        top = tk.Frame(wrap, bg=CLR["panel2"])
+        top.pack(fill="x")
+        inner = tk.Frame(top, bg=CLR["panel2"])
+        inner.pack(fill="x", padx=12, pady=8)
+        tk.Label(inner, text="IMPORTAR PROMPT PRONTO", bg=CLR["panel2"], fg=CLR["accent"], font=FONT_H).pack(side="left")
+        InfoIcon(inner, "Importar um prompt existente",
+                 "Cole (ou abra de um .txt) um prompt que voce ja tem, em portugues ou ingles. O programa le o texto "
+                 "e distribui nos campos: enquadramento, angulo, lente, abertura, luz, cor, estilo, proporcao, fps, "
+                 "seed, negative, personagem, roupa, cenario...\n\n"
+                 "Se o arquivo tiver varios prompts (separados por ----, por 'portugues'/'english' ou por titulos "
+                 "numerados), escolha qual importar.\n\n"
+                 "O que for reconhecido preenche o campo certo. O que nao for vai para 'Trechos livres', entao nada se perde. "
+                 "Os campos NAO reconhecidos podem ficar marcados com ⚑ para voce preencher depois.\n\n"
+                 "Depois de importar, mude so o que quiser (personagem, camera, luz...) e o prompt se refaz inteiro.\n\n"
+                 "Resultados marcados '~aproximado' foram deduzidos por palavras: confira.").pack(side="left", padx=8)
+
+        bar = tk.Frame(wrap, bg=CLR["panel"])
+        bar.pack(fill="x", padx=12, pady=(8, 2))
+        ttk.Button(bar, text="Colar da area de transferencia", command=self.import_paste).pack(side="left", padx=(0, 6))
+        ttk.Button(bar, text="Abrir .txt...", command=self.import_open).pack(side="left", padx=6)
+        ttk.Button(bar, text="Limpar", command=lambda: self.imp_text.delete("1.0", "end")).pack(side="left", padx=6)
+        tk.Label(bar, text="Prompt a importar:", bg=CLR["panel"], fg=CLR["fg"], font=FONT).pack(side="left", padx=(16, 4))
+        self.imp_pick = tk.StringVar()
+        self.imp_combo = ttk.Combobox(bar, textvariable=self.imp_pick, state="readonly", width=60, values=[])
+        self.imp_combo.pack(side="left", fill="x", expand=True)
+
+        h = tk.Frame(wrap, bg=CLR["panel"])
+        h.pack(fill="both", expand=True, padx=12, pady=6)
+        h.columnconfigure(0, weight=1)
+        h.columnconfigure(1, weight=1)
+        h.rowconfigure(1, weight=1)
+        tk.Label(h, text="Seu prompt (pode editar aqui)", bg=CLR["panel"], fg=CLR["fg_dim"], font=FONT).grid(row=0, column=0, sticky="w")
+        tk.Label(h, text="O que o programa entendeu", bg=CLR["panel"], fg=CLR["fg_dim"], font=FONT).grid(row=0, column=1, sticky="w", padx=(8, 0))
+        self.imp_text = make_text(h, height=14)
+        self.imp_text.grid(row=1, column=0, sticky="nsew")
+        self.imp_report = make_text(h, height=14, mono=True)
+        self.imp_report.grid(row=1, column=1, sticky="nsew", padx=(8, 0))
+        self.imp_report.configure(state="disabled")
+
+        opt = tk.Frame(wrap, bg=CLR["panel"])
+        opt.pack(fill="x", padx=12, pady=(0, 4))
+        self.imp_clear = tk.BooleanVar(value=True)
+        self.imp_mark = tk.BooleanVar(value=True)
+        self.imp_beats = tk.BooleanVar(value=True)
+        ttk.Checkbutton(opt, text="Esvaziar os campos que nao foram reconhecidos", variable=self.imp_clear).pack(side="left", padx=(0, 16))
+        ttk.Checkbutton(opt, text="Marcar esses campos como ⚑ pendentes", variable=self.imp_mark).pack(side="left", padx=(0, 16))
+        ttk.Checkbutton(opt, text="Trocar o roteiro por 1 cena so (sem gatilhos)", variable=self.imp_beats).pack(side="left")
+        act = tk.Frame(wrap, bg=CLR["panel"])
+        act.pack(fill="x", padx=12, pady=(2, 12))
+        ttk.Button(act, text="Analisar e preencher campos", style="Accent.TButton", command=self.import_apply).pack(side="left")
+        ttk.Button(act, text="Enviar texto para a Saida (editar livre)", command=self.import_to_output).pack(side="left", padx=10)
+        self._imp_blocks = []
+        self.imp_combo.bind("<<ComboboxSelected>>", self.import_choose)
+
+    def import_paste(self):
+        try:
+            txt = self.clipboard_get()
+        except Exception:
+            messagebox.showinfo("Importar", "A area de transferencia esta vazia.")
+            return
+        self.imp_text.delete("1.0", "end")
+        self.imp_text.insert("1.0", txt)
+        self.import_detect()
+
+    def import_open(self):
+        path = filedialog.askopenfilename(filetypes=[("Texto", "*.txt *.md"), ("Todos", "*.*")])
+        if not path:
+            return
+        try:
+            with open(path, encoding="utf-8-sig") as fh:
+                txt = fh.read()
+        except Exception as exc:
+            messagebox.showerror("Importar", "Nao foi possivel ler o arquivo:\n%s" % exc)
+            return
+        self.imp_text.delete("1.0", "end")
+        self.imp_text.insert("1.0", txt)
+        self.import_detect()
+
+    def import_detect(self):
+        """Separa varios prompts do texto e preenche a lista de escolha."""
+        self._imp_blocks = split_prompts(self.imp_text.get("1.0", "end-1c"))
+        labels = ["%d - [%s] %s" % (i + 1, detect_lang(b).upper(), re.sub(r"\s+", " ", b)[:70] + "...")
+                  for i, b in enumerate(self._imp_blocks)]
+        self.imp_combo.configure(values=labels)
+        if labels:
+            self.imp_combo.current(0)
+        self.say("%d prompt(s) encontrado(s) no texto." % len(labels), CLR["ok"] if labels else CLR["warn"])
+
+    def import_choose(self, _e=None):
+        pass
+
+    def _imp_selected(self) -> str:
+        if not self._imp_blocks:
+            self.import_detect()
+        idx = self.imp_combo.current()
+        if idx < 0 or idx >= len(self._imp_blocks):
+            return ""
+        return self._imp_blocks[idx]
+
+    def import_apply(self):
+        # se o usuario editou o texto depois da deteccao, redetecta
+        if "\n".join(self._imp_blocks) != "\n".join(split_prompts(self.imp_text.get("1.0", "end-1c"))):
+            self.import_detect()
+        block = self._imp_selected()
+        if not block.strip():
+            messagebox.showinfo("Importar", "Cole ou abra um prompt primeiro.")
+            return
+        res = parse_prompt(block)
+        found = dict(res["fields"])
+        notes = " | ".join(res["leftover"])
+        if notes:
+            found["free_notes"] = notes
+        # 1) esvazia o que nao foi reconhecido
+        keep = {"translate", "seed_lock", "negative_preset", "subject_type", "motion", "consistency", "duration",
+                "ref_weight"}
+        if self.imp_clear.get():
+            blank = {}
+            for fid, f in FIELD_BY_ID.items():
+                if fid in found or fid in keep:
+                    continue
+                blank[fid] = [] if f.kind == "checks" else ("" if f.kind in ("entry", "text", "combo") else f.default)
+            self.set_state(blank)
+        # 2) preenche
+        fill = dict(found)
+        fill["translate"] = (res["lang"] == "pt")
+        self.set_state(fill)
+        if self.imp_beats.get():
+            self.beats = [new_beat("Cena 1 (importada)", "Cena criada pelo Importador: usa so os campos preenchidos.")]
+            self.render_beats()
+        # 3) pendencias
+        if self.imp_mark.get():
+            self.set_pending([fid for fid in FIELD_BY_ID if fid not in found and fid not in keep])
+        else:
+            for fid in found:
+                if fid in self.pending:
+                    self.pending[fid].set(False)
+                    self._pending_changed(fid)
+        # 4) relatorio
+        lines = ["Idioma detectado: %s%s" % (res["lang"].upper(),
+                 "  (tradutor ligado)" if res["lang"] == "pt" else "  (tradutor desligado: o texto ja esta em ingles)"),
+                 "", "RECONHECIDO (%d campos):" % len(res["recognized"])]
+        for label, val, how in res["recognized"]:
+            lines.append("  ✓ %s\n      = %s\n      (%s)" % (label, val if len(val) < 140 else val[:137] + "...", how))
+        lines += ["", "SEM CAMPO PROPRIO -> 'Trechos livres':"] + (["  • " + x for x in res["leftover"]] or ["  (nada)"])
+        lines += ["", "Confira a lista acima: itens '~aproximado' foram deduzidos por palavras."]
+        self.imp_report.configure(state="normal")
+        self.imp_report.delete("1.0", "end")
+        self.imp_report.insert("1.0", "\n".join(lines))
+        self.imp_report.configure(state="disabled")
+        self.say("Importado: %d campos preenchidos, %d trecho(s) em 'Trechos livres'. Edite o que quiser e gere."
+                 % (len(res["recognized"]), len(res["leftover"])), CLR["ok"])
+
+    def import_to_output(self):
+        block = self._imp_selected() or self.imp_text.get("1.0", "end-1c")
+        self.out_text.delete("1.0", "end")
+        self.out_text.insert("1.0", block)
+        self.nb.select(self.nb.index("end") - 1)
+        self.say("Texto enviado para a Saida: edite livremente e use Copiar / Salvar .txt.", CLR["ok"])
+
     # ------------------------------------------------------------ dicionario
     def _build_dict_tab(self):
         wrap = tk.Frame(self.nb, bg=CLR["panel"])
@@ -2701,7 +3141,7 @@ class App(tk.Tk):
         ttk.Combobox(g, textvariable=v["transition"], values=opt_list("transition")).grid(
             row=7, column=1, sticky="ew", padx=(0, 8))
         self._lab(g, "Texto na tela (cena)",
-                  "Texto escrito na tela so nesta cena. Vazio = usa o texto global da aba 'Referencias & Texto'. "
+                  "Texto escrito na tela so nesta cena. Vazio = usa o texto global da aba 'Referencias'. "
                   "Prefira poucas palavras.", 7, 2)
         ttk.Entry(g, textvariable=v["text"]).grid(row=7, column=3, sticky="ew", padx=(0, 8))
 
@@ -2819,7 +3259,7 @@ class App(tk.Tk):
     # ==================================================================== SAIDA
     def _build_output_tab(self):
         wrap = tk.Frame(self.nb, bg=CLR["panel"])
-        self.nb.add(wrap, text="Saida / Exportar")
+        self.nb.add(wrap, text="Saida")
 
         bar = tk.Frame(wrap, bg=CLR["panel2"])
         bar.pack(fill="x")

@@ -11,13 +11,14 @@ gerador-de-prompt/
 ├── gerador_de_prompt.py   # aplicativo (GUI + lógica + catálogo de opções)
 ├── executar.bat           # launcher do Windows (duplo clique)
 ├── README.md              # este arquivo
-├── .gitignore             # mantém dados/usuario.json e saidas/ fora do Git
+├── .gitignore             # mantém dados/usuario.json, saidas/ e historico/ fora do Git
 ├── dados/                 # DICIONÁRIO
 │   ├── gatilhos.json      # base (Git): palavra-chave -> enquadramento, lente, ação, extra
 │   ├── glossario.json     # base (Git): tradução PT -> EN offline
 │   └── usuario.json       # SEU (local, fora do Git): criado ao salvar na aba Dicionário
 ├── presets/               # seus presets .json (criada ao salvar o primeiro)
-└── saidas/                # prompts exportados
+├── historico/             # versões geradas (automático, últimas 100; local)
+└── saidas/                # prompts exportados (inclusive multi-formato)
 ```
 
 ### Dicionário: base no Git, edições locais
@@ -40,6 +41,12 @@ gerador_de_prompt.py
 ├── NEGATIVE_BASE / NEGATIVE_PRESETS   # prompts negativos prontos
 ├── load_dictionaries()   # carrega dados/*.json (base + usuário) em KEYWORD_TRIGGERS e GLOSSARY
 ├── find_trigger()        # busca da palavra-chave (sem acento, plural, frase mais longa)
+├── SECTIONS += [...]     # campos de agência: movimento detalhado, referências, texto na tela,
+│                         #   continuidade, briefing e marca (todos nascem vazios e com ⚑)
+├── DEFAULT_PENDING       # campos que já começam marcados com ⚑
+├── PLATFORM_LIMITS       # limites APROXIMADOS de caracteres por plataforma (ajuste se mudarem)
+├── preflight()           # verificador (checklist antes de gerar)
+├── IMPORT_ALIASES / parse_prompt() / split_prompts()   # importador de prompt pronto
 ├── SECTIONS              # blocos da interface e campos de cada um (com textos de ajuda)
 │   └── Hook → Setup → Build → Reveal → Proof → The Call / Outro
 ├── MASTER_TEMPLATE       # molde do prompt final, onde os tokens são encaixados
@@ -52,6 +59,38 @@ gerador_de_prompt.py
 └── main()
 ```
 
+## Marcador ⚑ "preencher depois"
+
+Cada campo tem um ⚑ ao lado do nome. **Marcado = o campo fica fora do prompt** e entra na lista de pendências
+(botão `⚑ Pendentes` no topo; duplo clique leva até o campo). Assim você não precisa preencher tudo.
+- Ao digitar ou escolher algo no campo, a marca sai sozinha (para o valor não ser ignorado sem você perceber).
+- `Ferramentas → ⚑ Marcar TODOS os campos como pendentes` (ou o preset **Modelo em branco**) começa do zero.
+- `Ferramentas → ⚑ Remover todas as marcações` usa tudo que está preenchido.
+- As marcações são salvas junto com os presets e o histórico.
+
+## Importar um prompt pronto
+
+Aba **Importar**: cole (ou abra um `.txt` com) um prompt em português ou inglês. Se o arquivo tiver vários
+prompts (separados por `----`, por `português`/`english` ou por títulos numerados), escolha qual importar.
+O programa distribui o texto nos campos (enquadramento, ângulo, lente, abertura, luz, cor, estilo, proporção,
+fps, seed, negative, personagem, roupa, cenário...). O que não tem campo vai para **Trechos livres**, então
+nada se perde, e o relatório mostra o que foi entendido (`~aproximado` = deduzido por palavras, confira).
+Opções: esvaziar e marcar com ⚑ o que não foi reconhecido, e trocar o roteiro por uma cena só.
+Também há **Enviar texto para a Saída** para editar o prompt original livremente sem usar os campos.
+
+## Recursos de agência
+
+| Recurso | Onde |
+|---|---|
+| Imagem de referência, primeiro/último frame, peso | aba **Referencias** (sai como `--cref/--sref` no Midjourney e como linha REFERENCE nos demais) |
+| Texto na tela (global e por cena) | aba **Referencias** e campo "Texto na tela" de cada cena |
+| Continuidade entre cenas + transição para a próxima cena | aba **Referencias** e campo "Transição" de cada cena |
+| Briefing (objetivo, público, tom, CTA) e marca (cores, logo, sempre mostrar, nunca mostrar) | aba **Marca** ("Nunca mostrar" entra sozinho no Negative Prompt) |
+| Movimento detalhado (velocidade, easing, foco, física) | aba **Camera** |
+| Checklist antes de gerar (campos faltando, seed inválida, item proibido no prompt, limite de caracteres) | aba **Saida**, abaixo do prompt |
+| Histórico de versões geradas | `Arquivo → Historico...` |
+| Todos os formatos de uma vez (9:16, 1:1, 16:9, 4:5) + versão B do gancho | botão **Todos os formatos...** na aba Saida |
+
 ## Como usar
 
 1. **Roteiro por palavra-chave**: cada cena tem a palavra ("celular", "copo de água") e, na frente dela, enquadramento, ângulo, movimento, lente, ação, duração, fala e detalhe extra. A escolha vale só para aquela cena.
@@ -61,7 +100,7 @@ gerador_de_prompt.py
 5. **Presets JSON**: salvar e carregar modelos prontos em um clique.
 6. **Lucky Roll**: sorteia combinações cinematográficas compatíveis.
 7. **Exportação**: Midjourney (`--ar --style --s --seed --no`), Runway, Kling, Luma, Sora/Hunyuan, Veo 3, shot list e JSON.
-8. **Tradutor**: escreva em português, o prompt sai em inglês técnico. Palavras fora do glossário aparecem em um aviso. Opcional online: `pip install deep-translator`.
+8. **Tradutor** (desligado automaticamente ao importar texto em inglês): escreva em português, o prompt sai em inglês técnico. Palavras fora do glossário aparecem em um aviso. Opcional online: `pip install deep-translator`.
 
 ## Instalar (Windows)
 
