@@ -2106,6 +2106,114 @@ def parse_prompt(text: str) -> dict:
         fields["char_desc"] = clean_join([age.replace("-", " "), fields["char_desc"]])
     return {"fields": fields, "recognized": rec, "leftover": leftover, "lang": lang}
 
+
+# ----------------------------------------------------------------------------
+# APLICAR MUDANCAS NO PROMPT PRONTO
+#   Compara o projeto "como foi gerado" com o projeto "como esta agora" e troca, no texto da
+#   saida, cada trecho antigo pelo novo - em TODAS as cenas. Preserva edicoes manuais.
+# ----------------------------------------------------------------------------
+# campos que, ao mudar, arrastam outro campo junto
+APPLY_DEPENDS = {"negative_preset": ["negative"]}
+
+
+def _norm_snip(t) -> str:
+    return re.sub(r"\s+", " ", str(t or "")).strip(" ,.")
+
+
+def snippet_pairs(old: "Compiler", new: "Compiler") -> tuple[list[dict], list]:
+    """Para cada cena: {trecho_antigo: trecho_novo}. E a lista de trechos novos sem lugar para entrar."""
+    per_scene: list[dict] = []
+    inserts: list[str] = []
+    obeats = old.beats or [None]
+    nbeats = new.beats or [None]
+    for i, (ob, nb) in enumerate(zip(obeats, nbeats)):
+        pairs: dict[str, str] = {}
+
+        def add(o, n):
+            o, n = _norm_snip(o), _norm_snip(n)
+            if o == n:
+                return
+            if not o:
+                if n and n not in inserts:
+                    inserts.append(n)
+                return
+            pairs.setdefault(o, n)
+
+        ot, nt = old.tokens(ob, i), new.tokens(nb, i)
+        for k in ot:
+            if k.startswith("{") or k in ("_kw_raw", "_props", "_transition"):
+                add(ot[k], nt.get(k, ""))
+        add(old.negative_text(ob), new.negative_text(nb))
+        oe = {l.split(":", 1)[0]: l.split(":", 1)[1] for l in old.extras_lines(ob) if ":" in l}
+        ne = {l.split(":", 1)[0]: l.split(":", 1)[1] for l in new.extras_lines(nb) if ":" in l}
+        for tag in set(oe) | set(ne):
+            add(oe.get(tag, ""), ne.get(tag, ""))
+        per_scene.append(pairs)
+    return per_scene, inserts
+
+
+_SCENE_MARK = re.compile(r"(?m)^(?:/imagine prompt: )?\[(\d+)\] |^-{3,5} CENA (\d+)\b|^SCENE (\d+) - ")
+_EMPTY_TAGS = re.compile(r"^[ \t]*(?:BRAND|MUST SHOW|MOTION DETAIL|ON-SCREEN TEXT|CONTINUITY \(identical in every scene\)|NOTES"
+                         r"|BRIEF|REFERENCE|PROPS):[ \t]*[.,]?[ \t]*$")
+
+
+def _tidy_changed_line(line: str) -> str:
+    line = re.sub(r"(,\s*){2,}", ", ", line)
+    line = re.sub(r",\s*\.", ".", line)
+    line = re.sub(r"[ \t]+,", ",", line)
+    return re.sub(r"^([ \t]*[A-Z]+:)\s*,\s*", r"\1 ", line)
+
+
+def _patch_block(block: str, pairs: dict, counts: dict) -> str:
+    if not pairs:
+        return block
+    olds = sorted(pairs, key=len, reverse=True)
+    pat = re.compile("|".join(r"(?<![\w])%s(?![\w])" % re.escape(o) for o in olds), re.I)
+    lower = {o.lower(): o for o in olds}
+
+    def sub(m):
+        key = lower.get(m.group(0).lower())
+        if key is None:
+            return m.group(0)
+        counts[key] = counts.get(key, 0) + 1
+        return pairs[key]
+
+    out = []
+    for line in block.split("\n"):
+        new = pat.sub(sub, line)
+        if new != line:
+            new = _tidy_changed_line(new)
+            if _EMPTY_TAGS.match(new):
+                continue
+        out.append(new)
+    return "\n".join(out)
+
+
+def patch_text(text: str, per_scene: list[dict]) -> tuple[str, dict, list]:
+    """Aplica as trocas de cada cena SO dentro do bloco daquela cena (as demais ficam intactas).
+    Antes do primeiro marcador de cena vale a cena 1. Sem marcadores, usa todas as trocas no texto todo.
+    Retorna (texto, {trecho: vezes}, [trechos que nao foram achados])."""
+    counts: dict[str, int] = {}
+    marks = list(_SCENE_MARK.finditer(text))
+    if not marks:
+        merged: dict = {}
+        for p in per_scene:
+            for k, v in p.items():
+                merged.setdefault(k, v)
+        return _patch_block(text, merged, counts), counts, [o for o in merged if o not in counts]
+    cuts = [(0, marks[0].start(), 0)]
+    for j, m in enumerate(marks):
+        idx = int(next(g for g in m.groups() if g)) - 1
+        end = marks[j + 1].start() if j + 1 < len(marks) else len(text)
+        cuts.append((m.start(), end, idx))
+    out = []
+    for start, end, idx in cuts:
+        pairs = per_scene[idx] if 0 <= idx < len(per_scene) else {}
+        out.append(_patch_block(text[start:end], pairs, counts))
+    wanted = {o for p in per_scene for o in p}
+    return "".join(out), counts, sorted(o for o in wanted if o not in counts)
+
+
 # ============================================================================
 #  WIDGETS DE INTERFACE
 # ============================================================================
@@ -2327,6 +2435,10 @@ class App(tk.Tk):
         self.out_cache: dict[str, str] = {}
         self.hint_updaters: list = []
         self.pending: dict[str, tk.BooleanVar] = {}
+        self.snap = None            # projeto 'como foi gerado' (base das trocas)
+        self.out_dirty = False      # o texto da saida foi editado a mao?
+        self._prog = False
+        self.apply_btns: dict[str, ttk.Button] = {}
         self.field_labels: dict[str, tk.Label] = {}
         self.field_tab: dict[str, str] = {}
 
@@ -2355,6 +2467,7 @@ class App(tk.Tk):
         self.apply_preset("Vlog UGC", silent=True)
         self.set_pending(DEFAULT_PENDING)
         self.render_beats()
+        self.after(900, self._poll_changes)
         self.say("Preset inicial 'Vlog UGC' carregado. Altere um campo e clique em GERAR PROMPT.")
 
     # ------------------------------------------------------------------ util
@@ -2390,6 +2503,7 @@ class App(tk.Tk):
                       activebackground=CLR["accent"], activeforeground="#0e1016")
         fer.add_command(label="Lucky Roll (sorteio cinematografico)", command=self.lucky_roll)
         fer.add_command(label="Gerar nova seed aleatoria", command=self.random_seed)
+        fer.add_command(label="↻ Aplicar todas as mudancas no prompt pronto", command=self.apply_changes)
         fer.add_command(label="Verificar antes de gerar (checklist)", command=lambda: (self.nb.select(self.nb.index("end") - 1), self.generate(switch=False)))
         fer.add_command(label="⚑ Ver campos pendentes...", command=self.show_pending)
         fer.add_command(label="⚑ Marcar TODOS os campos como pendentes (modelo em branco)", command=self.mark_all_pending)
@@ -2415,12 +2529,13 @@ class App(tk.Tk):
 
         tk.Label(bar, text="GERADOR DE PROMPT UNIVERSAL", bg=CLR["bg"], fg=CLR["fg"],
                  font=("Segoe UI", 13, "bold")).pack(side="left")
-        tk.Label(bar, text="  formula unica  ·  voce muda um campo, todo o roteiro muda",
-                 bg=CLR["bg"], fg=CLR["fg_dim"], font=FONT).pack(side="left")
 
         ttk.Button(bar, text="⚡ GERAR PROMPT", style="Accent.TButton",
                    command=lambda: self.generate(save=True)).pack(side="right", padx=(8, 0))
         ttk.Button(bar, text="🎲 Lucky Roll", command=self.lucky_roll).pack(side="right", padx=4)
+        ttk.Button(bar, text="↻ Aplicar", command=self.apply_changes).pack(side="right", padx=4)
+        self.change_lbl = tk.Label(bar, text="", bg=CLR["bg"], fg=CLR["accent2"], font=FONT_B)
+        self.change_lbl.pack(side="right", padx=4)
         self.pend_btn = ttk.Button(bar, text="⚑ Pendentes: 0", command=self.show_pending)
         self.pend_btn.pack(side="right", padx=4)
 
@@ -2455,6 +2570,11 @@ class App(tk.Tk):
         lab.pack(side="left")
         InfoIcon(left, f.label, f.info).pack(side="left", padx=(6, 0))
         self.field_labels[f.id] = lab
+        ap = ttk.Button(grid, text="Aplicar", width=9, command=lambda _id=f.id: self.apply_changes(only={_id}))
+        ap.grid(row=r * 2, column=2, sticky="ne", padx=(0, 8), pady=(7, 0))
+        self.apply_btns[f.id] = ap
+        Tooltip(ap, "Aplicar SO esta mudanca no prompt pronto: troca o texto antigo pelo novo em todas as cenas, "
+                    "sem refazer o resto nem perder o que voce editou a mao na aba Saida.")
         pv = tk.BooleanVar(value=(f.id in DEFAULT_PENDING))
         self.pending[f.id] = pv
         pk = tk.Checkbutton(left, text="⚑", variable=pv, bg=CLR["panel"], fg=CLR["accent2"],
@@ -2690,6 +2810,7 @@ class App(tk.Tk):
                  "sugestao automatica de camera. Enquanto 'auto' estiver marcado a sugestao e aplicada; "
                  "ao escolher manualmente um enquadramento o 'auto' desliga e a sua escolha manda.").pack(side="left", padx=8)
 
+        ttk.Button(inner, text="↻ Aplicar mudanças no prompt", command=self.apply_changes).pack(side="right", padx=4)
         ttk.Button(inner, text="+ Adicionar cena", command=self.add_beat).pack(side="right", padx=4)
         ttk.Button(inner, text="Blocos padrao", command=self.reset_beats).pack(side="right", padx=4)
         ttk.Button(inner, text="Limpar roteiro", command=self.clear_beats).pack(side="right", padx=4)
@@ -2859,8 +2980,8 @@ class App(tk.Tk):
 
     def import_to_output(self):
         block = self._imp_selected() or self.imp_text.get("1.0", "end-1c")
-        self.out_text.delete("1.0", "end")
-        self.out_text.insert("1.0", block)
+        self.snap = None
+        self.set_out(block)
         self.nb.select(self.nb.index("end") - 1)
         self.say("Texto enviado para a Saida: edite livremente e use Copiar / Salvar .txt.", CLR["ok"])
 
@@ -3280,6 +3401,7 @@ class App(tk.Tk):
 
         ttk.Button(b, text="⚡ Gerar / Atualizar", style="Accent.TButton",
                    command=lambda: self.generate(save=True)).pack(side="left", padx=(14, 4))
+        ttk.Button(b, text="↻ Aplicar mudanças", command=self.apply_changes).pack(side="left", padx=4)
         ttk.Button(b, text="Copiar", command=self.copy_out).pack(side="left", padx=4)
         ttk.Button(b, text="Salvar .txt", command=self.export_txt).pack(side="left", padx=4)
         ttk.Button(b, text="Salvar .json", command=self.export_json).pack(side="left", padx=4)
@@ -3307,6 +3429,7 @@ class App(tk.Tk):
         holder = tk.Frame(wrap, bg=CLR["panel"])
         holder.pack(fill="both", expand=True, padx=12, pady=(2, 8))
         self.out_text = make_text(holder, height=10, mono=True)
+        self.out_text.bind("<<Modified>>", self._out_modified)
         sb = ttk.Scrollbar(holder, command=self.out_text.yview)
         self.out_text.configure(yscrollcommand=sb.set)
         self.out_text.pack(side="left", fill="both", expand=True)
@@ -3334,8 +3457,8 @@ class App(tk.Tk):
         except Exception as exc:
             messagebox.showerror("Erro ao compilar", "%s: %s" % (type(exc).__name__, exc))
             return
-        self.out_text.delete("1.0", "end")
-        self.out_text.insert("1.0", txt)
+        self.set_out(txt)
+        self._take_snapshot(key, txt)
         self.plat_note.configure(text="ⓘ " + PLATFORM_NOTES.get(key, ""))
         self.show_checklist(comp, key)
         if save:
@@ -3351,6 +3474,152 @@ class App(tk.Tk):
             self.nb.select(self.nb.index("end") - 1)
         self.say("Prompt gerado para %s - %d cena(s)." % (self.plat_var.get(), len(self.beats)), CLR["ok"])
 
+
+    # ------------------------------------------- aplicar mudancas no prompt pronto
+    def set_out(self, text: str, dirty: bool = False):
+        """Escreve na saida sem contar como 'edicao manual' (a menos que dirty=True)."""
+        self._prog = True
+        self.out_text.delete("1.0", "end")
+        self.out_text.insert("1.0", text)
+        self.out_text.edit_modified(False)
+        self._prog = False
+        self.out_dirty = dirty
+
+    def _out_modified(self, _e=None):
+        if self._prog:
+            return
+        if self.out_text.edit_modified():
+            self.out_dirty = True
+            self.out_text.edit_modified(False)
+
+    def _take_snapshot(self, key, txt):
+        self.read_beats()
+        self.snap = {"state": self.get_state(), "beats": json.loads(json.dumps(self.beats)),
+                     "template": self.template_text.get("1.0", "end-1c"), "platform": key, "text": txt}
+        self._refresh_changes()
+
+    def changed_fields(self) -> list[str]:
+        if not self.snap:
+            return []
+        cur, sn = self.get_state(), self.snap["state"]
+        cp, sp = set(cur.get("_pending", [])), set(sn.get("_pending", []))
+        out = []
+        for fid in FIELD_BY_ID:
+            if fid in cp and fid in sp:
+                continue                      # ⚑ nos dois: nao afeta o prompt
+            if cur.get(fid) != sn.get(fid) or ((fid in cp) != (fid in sp)):
+                out.append(fid)
+        return out
+
+    def _beats_changed(self) -> bool:
+        if not self.snap:
+            return False
+        self.read_beats()
+        return json.dumps(self.beats, sort_keys=True) != json.dumps(self.snap["beats"], sort_keys=True)
+
+    def _refresh_changes(self):
+        try:
+            ch = set(self.changed_fields())
+            for dep_src, deps in APPLY_DEPENDS.items():
+                if any(d in ch for d in deps):
+                    ch.add(dep_src)
+            for fid, btn in self.apply_btns.items():
+                want = "▶ Aplicar" if fid in ch else "Aplicar"
+                if btn.cget("text") != want:
+                    btn.configure(text=want, style="Accent.TButton" if fid in ch else "TButton")
+            n = len(ch) + (1 if self._beats_changed() else 0)
+            self.change_lbl.configure(text=("● %d por aplicar" % n) if (n and self.snap) else "")
+        except Exception:
+            pass
+
+    def _poll_changes(self):
+        self._refresh_changes()
+        self.after(900, self._poll_changes)
+
+    def apply_changes(self, only=None):
+        """Aplica no prompt pronto as mudancas feitas nos campos/cenas desde a ultima geracao.
+        only = {ids de campo} aplica so aqueles; None aplica tudo."""
+        self.read_beats()
+        key = self.plat_map.get(self.plat_var.get(), "universal")
+        out = self.out_text.get("1.0", "end-1c")
+        snap = self.snap
+        if snap is None or not out.strip():
+            if out.strip() and not messagebox.askyesno(
+                    "Aplicar", "O texto da Saida nao foi gerado pelos campos (veio de fora).\n"
+                               "Gerar agora a partir dos campos e substituir o texto?"):
+                return
+            self.generate(switch=False)
+            return
+        cur = self.get_state()
+        tmpl = self.template_text.get("1.0", "end-1c")
+        if only is None:
+            mix_state, mix_beats = dict(cur), json.loads(json.dumps(self.beats))
+        else:
+            ids = set(only)
+            for src, deps in APPLY_DEPENDS.items():
+                if src in ids:
+                    ids |= set(deps)
+            mix_state = dict(snap["state"])
+            pend = set(snap["state"].get("_pending", []))
+            cp = set(cur.get("_pending", []))
+            for fid in ids:
+                if fid in cur:
+                    mix_state[fid] = cur[fid]
+                (pend.add if fid in cp else pend.discard)(fid)
+            mix_state["_pending"] = sorted(pend)
+            mix_beats = json.loads(json.dumps(snap["beats"]))
+        structural = (key != snap["platform"] or tmpl != snap["template"]
+                      or len(mix_beats) != len(snap["beats"]))
+        same = (not structural and json.dumps(mix_state, sort_keys=True, default=str)
+                == json.dumps(snap["state"], sort_keys=True, default=str)
+                and json.dumps(mix_beats, sort_keys=True) == json.dumps(snap["beats"], sort_keys=True))
+        if same:
+            self.say("Nenhuma mudanca para aplicar: o prompt ja esta igual aos campos.", CLR["fg_dim"])
+            return
+        new_comp = Compiler(mix_state, mix_beats, tmpl)
+
+        def commit(text, dirty):
+            self.set_out(text, dirty)
+            self.snap = {"state": mix_state, "beats": mix_beats, "template": tmpl, "platform": key,
+                         "text": text if not dirty else snap["text"]}
+            self.show_checklist(new_comp, key)
+            self._refresh_changes()
+
+        # texto intacto (ou mudanca estrutural): refaz exato, com so as mudancas escolhidas
+        if structural or not self.out_dirty:
+            if structural and self.out_dirty and not messagebox.askyesno(
+                    "Aplicar", "Mudou a plataforma, o numero de cenas ou a formula. Isso exige refazer o texto\n"
+                               "e as suas edicoes manuais na Saida serao perdidas. Continuar?"):
+                return
+            commit(new_comp.build(key), False)
+            self.say("Mudancas aplicadas (prompt refeito sem edicoes manuais a preservar).", CLR["ok"])
+            return
+
+        # texto editado a mao: troca so os trechos antigos pelos novos, em todas as cenas
+        old_comp = Compiler(snap["state"], snap["beats"], snap["template"])
+        pairs, inserts = snippet_pairs(old_comp, new_comp)
+        new_text, counts, missed = patch_text(out, pairs)
+        was = snap["text"].lower()
+        missed = [m for m in missed if m.lower() in was]      # so conta se estava no texto gerado
+        commit(new_text, True)
+        n = sum(counts.values())
+        msg = "Aplicado: %d troca(s) em %d trecho(s), suas edicoes foram preservadas." % (n, len(counts))
+        if not n and not inserts and not missed:
+            msg = "Nada para trocar no texto atual."
+        problems = []
+        if missed:
+            problems.append("Nao achei no texto (voce editou esse trecho?): " +
+                            "; ".join("'%s'" % (m if len(m) < 50 else m[:47] + "...") for m in missed[:5]))
+        if inserts:
+            problems.append("Campos que estavam vazios e agora tem conteudo nao tem onde entrar sem refazer o texto: " +
+                            "; ".join("'%s'" % (t if len(t) < 50 else t[:47] + "...") for t in inserts[:5]))
+        self.say(msg + ("  ▲ " + " | ".join(problems) if problems else ""),
+                 CLR["accent2"] if problems else CLR["ok"])
+        if inserts and messagebox.askyesno(
+                "Aplicar", "Alguns campos novos so entram refazendo o texto.\n\nRefazer o prompt do zero agora "
+                           "(as suas edicoes manuais na Saida serao perdidas)?"):
+            commit(new_comp.build(key), False)
+            self.say("Prompt refeito com todas as mudancas.", CLR["ok"])
 
     # ------------------------------------------------------------ checklist
     def show_checklist(self, comp=None, key=None):
@@ -3423,8 +3692,8 @@ class App(tk.Tk):
             if d.get("template"):
                 self.template_text.delete("1.0", "end")
                 self.template_text.insert("1.0", d["template"])
-            self.out_text.delete("1.0", "end")
-            self.out_text.insert("1.0", d.get("prompt", ""))
+            self.snap = None
+            self.set_out(d.get("prompt", ""))
             self.say("Versao de %s restaurada." % d.get("saved_at", ""), CLR["ok"])
             win.destroy()
         lb.bind("<Double-Button-1>", restore)
@@ -3479,8 +3748,8 @@ class App(tk.Tk):
             path = os.path.join(OUTPUT_DIR, "multi_%s_%s.txt" % (plat, datetime.datetime.now().strftime("%Y%m%d_%H%M")))
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write(txt)
-            self.out_text.delete("1.0", "end")
-            self.out_text.insert("1.0", txt)
+            self.snap = None
+            self.set_out(txt)
             self.say("%d versoes geradas e salvas em %s" % (len(parts), path), CLR["ok"])
             win.destroy()
         ttk.Button(win, text="Gerar e salvar", style="Accent.TButton", command=go).pack(pady=18)
@@ -3597,7 +3866,8 @@ class App(tk.Tk):
         self.beats = default_beats()
         self.render_beats()
         self.reset_template()
-        self.out_text.delete("1.0", "end")
+        self.snap = None
+        self.set_out("")
         self.say("Projeto novo.")
 
     def show_guide(self):

@@ -46,6 +46,7 @@ gerador_de_prompt.py
 ├── DEFAULT_PENDING       # campos que já começam marcados com ⚑
 ├── PLATFORM_LIMITS       # limites APROXIMADOS de caracteres por plataforma (ajuste se mudarem)
 ├── preflight()           # verificador (checklist antes de gerar)
+├── snippet_pairs() / patch_text()   # motor do Aplicar: troca trecho antigo por novo, cena a cena
 ├── IMPORT_ALIASES / parse_prompt() / split_prompts()   # importador de prompt pronto
 ├── SECTIONS              # blocos da interface e campos de cada um (com textos de ajuda)
 │   └── Hook → Setup → Build → Reveal → Proof → The Call / Outro
@@ -77,6 +78,19 @@ fps, seed, negative, personagem, roupa, cenário...). O que não tem campo vai p
 nada se perde, e o relatório mostra o que foi entendido (`~aproximado` = deduzido por palavras, confira).
 Opções: esvaziar e marcar com ⚑ o que não foi reconhecido, e trocar o roteiro por uma cena só.
 Também há **Enviar texto para a Saída** para editar o prompt original livremente sem usar os campos.
+
+## Aplicar mudanças no prompt pronto
+
+Com o prompt já gerado, mude qualquer escolha (câmera, luz, personagem, uma cena do roteiro...) e clique em
+**Aplicar**. O programa troca o texto antigo pelo novo **em todas as cenas**, sem refazer o resto.
+- **Aplicar** na frente de cada campo aplica só aquela mudança. O botão fica azul (`▶ Aplicar`) quando o campo mudou.
+- **↻ Aplicar** (topo, aba Saída, aba Roteiro, menu Ferramentas) aplica todas as mudanças de uma vez. O topo mostra
+  `● N por aplicar`.
+- Se você **não editou** o texto da Saída, ele é refeito exato. Se você **editou à mão**, só os trechos antigos são
+  trocados e as suas edições ficam. A troca de uma cena específica fica dentro daquela cena.
+- Se um trecho foi editado por você e não é mais achado, ou um campo que estava vazio passou a ter conteúdo
+  (não há onde entrar sem refazer), o programa avisa e pergunta se deve refazer o prompt do zero.
+- Mudar a plataforma, o número de cenas ou a fórmula exige refazer (pergunta antes se houver edição manual).
 
 ## Recursos de agência
 
