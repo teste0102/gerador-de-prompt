@@ -711,6 +711,152 @@ SECTIONS = [
     ]),
 ]
 
+
+# ---------------------------------------------------------------------------
+# CAMPOS ADICIONAIS (agencia): referencias, continuidade, texto na tela,
+# movimento detalhado, marca e briefing. Todos nascem VAZIOS e marcados
+# como pendentes (⚑) - voce preenche quando precisar.
+# ---------------------------------------------------------------------------
+OPTIONS["ref_mode"] = [
+    O("Referencia de personagem (rosto/roupa)", "character reference, keep the same face and outfit as the reference image",
+      "A IA copia rosto e roupa da imagem. Use a foto do personagem ja aprovado para manter a mesma pessoa em todos os videos."),
+    O("Referencia de estilo / look", "style reference, match the color, lighting and texture of the reference image",
+      "A IA copia o 'clima' da imagem (cor, luz, textura), nao o conteudo."),
+    O("Referencia de cenario", "environment reference, match the location and set design of the reference image",
+      "Mantem o mesmo lugar entre cenas e videos."),
+    O("Referencia de produto", "product reference, reproduce the product exactly as in the reference image",
+      "Para o produto aparecer fiel (forma, cor, rotulo). Use foto do produto em fundo limpo."),
+    O("Primeiro frame (image-to-video)", "start frame image, animate from the first frame",
+      "A imagem vira o primeiro quadro do video e a IA anima a partir dela. Kling, Runway, Luma e Veo aceitam."),
+    O("Primeiro + ultimo frame", "start frame and end frame, interpolate motion between both",
+      "Voce define onde o video comeca e termina; a IA cria o caminho. Otimo para transicoes e transformacoes controladas."),
+]
+OPTIONS["onscreen_pos"] = [
+    O("Topo da tela", "text overlay at the top of the frame", "Titulo ou gancho escrito no alto. Cuidado com a area de interface das redes (topo e rodape)."),
+    O("Centro da tela", "centered text overlay", "Texto de impacto, curto. Use poucas palavras."),
+    O("Terco inferior (lower third)", "lower-third text overlay", "Nome, cargo, preco ou legenda de produto, como em TV."),
+    O("Legenda estilo TikTok (palavra por palavra)", "bold word-by-word captions, centered lower, TikTok style",
+      "Legenda grande que acompanha a fala, destacando a palavra falada. Padrao de retencao em video vertical."),
+    O("Canto (marca d'agua / logo)", "small corner logo watermark", "Logo discreto no canto."),
+]
+OPTIONS["motion_speed"] = [
+    O("Muito lento (slow motion)", "ultra slow motion, 120fps look", "Cada detalhe aparece: gota, tecido, cabelo. Valoriza produto e momento de emocao."),
+    O("Lento e suave", "slow, smooth, deliberate motion", "Movimento calmo e elegante. Mais estavel na IA."),
+    O("Natural (tempo real)", "natural real-time motion", "Velocidade normal de uma pessoa."),
+    O("Rapido e energico", "fast, energetic motion", "Acao e ritmo. Maior risco de deformar maos e rosto."),
+    O("Speed ramp (rapido para lento)", "speed ramp from fast to slow motion", "Comeca rapido e freia no momento importante. Efeito classico de comercial."),
+    O("Timelapse", "timelapse motion", "Tempo acelerado: nuvens, luz mudando, multidao."),
+]
+OPTIONS["easing"] = [
+    O("Ease-in-out (suave)", "ease-in-out motion curve, smooth start and stop", "Comeca e termina devagar. Parece movimento de equipamento profissional."),
+    O("Ease-in (acelera)", "ease-in motion, gradually accelerating", "Comeca devagar e ganha velocidade. Tensao crescente."),
+    O("Ease-out (desacelera)", "ease-out motion, decelerating to a stop", "Chega rapido e assenta. Bom para revelar o produto."),
+    O("Linear (constante)", "constant linear speed motion", "Velocidade igual do inicio ao fim. Sensacao mecanica."),
+    O("Snap / impacto", "sudden snap with hard stop", "Movimento seco e parada brusca. Ritmo de batida."),
+]
+OPTIONS["focus_pull"] = [
+    O("Rack focus: fundo para sujeito", "rack focus from background to subject", "O foco 'chega' no personagem. Revela quem importa."),
+    O("Rack focus: sujeito para fundo", "rack focus from subject to background", "O foco passa para o que esta atras. Mostra contexto."),
+    O("Pull focus no produto", "pull focus onto the product", "O foco cai no produto no momento da revelacao."),
+    O("Foco fixo (sem variacao)", "locked focus, no focus change", "Mais estavel na IA. Padrao seguro."),
+    O("Dolly zoom (efeito vertigem)", "dolly zoom, vertigo effect", "Fundo se distorce enquanto o sujeito fica do mesmo tamanho. Tensao e surpresa. Use pouco."),
+    O("Focus breathing (foco respirando)", "subtle focus breathing", "Leve variacao natural de foco, como lente real."),
+]
+OPTIONS["physics"] = [
+    O("Cabelo ao vento", "hair moving naturally in the breeze", "Cabelo com movimento leve. Da vida ao retrato."),
+    O("Tecido fluindo", "fabric flowing and rippling naturally", "Roupa com caimento e movimento realista."),
+    O("Liquido / gotas", "realistic liquid physics, droplets and splashes", "Agua, cafe, creme com comportamento fisico crivel."),
+    O("Particulas / poeira", "floating dust particles drifting in the light", "Particulas no ar que mostram a luz."),
+    O("Fumaca / vapor", "wisps of steam and smoke rising", "Vapor de bebida, fumaca suave."),
+    O("Reflexos mudando", "reflections shifting with the movement", "Reflexos em vidro e metal acompanhando o movimento."),
+    O("Sombras se movendo", "shadows moving across the scene", "Sombras vivas, passagem de nuvem, folhas."),
+    O("Maos naturais (sem deformar)", "natural hands with correct anatomy, five fingers", "Reforco anti-defeito para cenas com maos."),
+]
+OPTIONS["transition"] = [
+    O("Corte seco (hard cut)", "hard cut", "Troca direta. A mais comum e a mais limpa."),
+    O("Match cut", "match cut on shape and motion", "A proxima cena comeca com forma ou movimento parecido com o final desta. Elegante e memoravel."),
+    O("Whip pan", "whip pan transition", "Giro rapido de camera que borra e leva para a proxima cena. Energia."),
+    O("Dissolve / crossfade", "dissolve crossfade", "Uma cena derrete na outra. Suave, passagem de tempo."),
+    O("Fade to black", "fade to black", "Escurece e encerra. Final de bloco ou de video."),
+    O("Atravessar objeto (push-through)", "push-through transition passing through an object", "A camera passa por um objeto e sai na proxima cena."),
+    O("Smash cut (contraste)", "smash cut for contrast", "Corte brusco entre calma e caos (ou o contrario). Surpresa."),
+    O("J-cut (audio antes)", "J-cut, audio leads the next scene", "O som da proxima cena comeca antes da imagem. Fluidez de narrativa."),
+    O("L-cut (audio depois)", "L-cut, audio continues over the next scene", "O som da cena anterior continua sobre a nova imagem."),
+]
+
+_N_BASE_SECTIONS = len(SECTIONS)
+SECTIONS += [
+    ("Camera", "Movimento detalhado (opcional)", [
+        F("motion_speed", "Velocidade do movimento", "combo", "motion_speed",
+          "A velocidade geral do movimento da cena (slow motion, natural, rapido, speed ramp).", ""),
+        F("easing", "Curva de aceleracao (easing)", "combo", "easing",
+          "Como o movimento comeca e termina. Ease-in-out parece equipamento profissional; snap da ritmo.", ""),
+        F("focus_pull", "Foco (rack focus / pull)", "combo", "focus_pull",
+          "Mudanca de foco durante a cena. 'Foco fixo' e o mais estavel; rack focus e visual de cinema.", ""),
+        F("subject_motion", "Direcao do movimento do sujeito", "entry", None,
+          "Para onde o personagem se move: 'da esquerda para a direita', 'se aproxima da camera', 'sobe a escada'. "
+          "Dizer a direcao evita a IA inventar movimento aleatorio.", ""),
+        F("physics", "Fisica e detalhes vivos", "checks", "physics",
+          "Elementos que se movem de forma realista (cabelo, tecido, liquido, particulas). Marque 2 ou 3.", ""),
+    ]),
+    ("Referencias & Texto", "Imagens de referencia e frames", [
+        F("ref_mode", "Tipo de referencia", "combo", "ref_mode",
+          "Como a imagem de referencia sera usada: personagem, estilo, cenario, produto ou primeiro/ultimo frame. "
+          "Kling, Runway, Luma e Veo aceitam imagem de entrada; Midjourney usa --cref / --sref.", ""),
+        F("ref_image", "Imagem de referencia (caminho ou link)", "entry", None,
+          "Caminho do arquivo ou link da imagem principal. O programa nao envia nada: ele escreve a linha de referencia no prompt "
+          "e voce anexa a imagem na plataforma. Em Midjourney, use o LINK da imagem.", ""),
+        F("ref_first", "Primeiro frame (imagem)", "entry", None,
+          "Imagem que sera o primeiro quadro do video (image-to-video).", ""),
+        F("ref_last", "Ultimo frame (imagem)", "entry", None,
+          "Imagem que sera o ultimo quadro do video. Usado com o primeiro frame para controlar inicio e fim.", ""),
+        F("ref_weight", "Peso da referencia (0-100)", "scale", (0, 100),
+          "Quanto a IA deve obedecer a referencia. 80+ = copia bem fiel; 30-50 = so inspiracao. "
+          "Em Midjourney vira --cw / --sw.", 60),
+    ]),
+    ("Referencias & Texto", "Texto na tela", [
+        F("onscreen_text", "Texto que aparece na tela", "text", None,
+          "O que fica escrito no video (gancho, preco, nome do produto). IA de video erra letras: prefira textos CURTOS "
+          "e, se precisar de texto perfeito, adicione na edicao depois.", ""),
+        F("onscreen_pos", "Posicao do texto", "combo", "onscreen_pos",
+          "Onde o texto aparece. Evite as bordas onde as redes colocam botoes.", ""),
+        F("onscreen_style", "Estilo do texto", "entry", None,
+          "Fonte e cor: 'branco, sans-serif grossa, sombra suave', 'amarelo neon'. Opcional.", ""),
+    ]),
+    ("Referencias & Texto", "Continuidade entre cenas", [
+        F("continuity", "Elementos que se repetem em todas as cenas", "text", None,
+          "O que NAO pode mudar de uma cena para outra: roupa, objeto na mao, cenario, cor de unha, joia. "
+          "Escreva como lista curta. Entra em todas as cenas para a IA manter a coerencia.", ""),
+        F("hook_b", "Gancho alternativo (variante B)", "entry", None,
+          "Palavra-chave alternativa para a cena 1. Na exportacao multi-formato o programa gera a versao A (atual) "
+          "e a versao B com este gancho, para testar qual retem mais.", ""),
+    ]),
+    ("Marca & Briefing", "Briefing da campanha", [
+        F("brief_goal", "Objetivo da campanha", "entry", None,
+          "Uma frase: vender, gerar lead, lancar produto, aumentar seguidores. Define o tom e a chamada final.", ""),
+        F("brief_audience", "Publico", "entry", None,
+          "Quem vai ver: 'mulheres 25-40, interesse em skincare, classe B'. Ajuda a escolher personagem, cenario e linguagem.", ""),
+        F("brief_tone", "Tom da comunicacao", "entry", None,
+          "Ex: 'divertido e direto', 'luxo discreto', 'educativo e confiavel'.", ""),
+        F("cta_text", "Chamada para acao (CTA)", "entry", None,
+          "A frase final: 'compre agora', 'link na bio', 'cupom OLA10'. Sem CTA o video nao converte.", ""),
+    ]),
+    ("Marca & Briefing", "Identidade da marca", [
+        F("brand_name", "Marca", "entry", None, "Nome da marca. Entra no prompt como contexto da cena.", ""),
+        F("product_name", "Produto", "entry", None, "Nome e tipo do produto: 'serum facial vitamina C 30ml'.", ""),
+        F("brand_colors", "Cores da marca", "entry", None,
+          "Ex: 'verde sage e bege'. A IA usa essas cores no cenario, na roupa e nos objetos.", ""),
+        F("logo_rule", "Regra do logo", "entry", None,
+          "Ex: 'logo visivel no frasco', 'sem logo na camisa'. IA nao reproduz logo perfeito: confira no resultado.", ""),
+        F("must_show", "Sempre mostrar", "text", None,
+          "Itens obrigatorios no video: 'rotulo do produto voltado para a camera', 'sorriso no final'. O verificador avisa se faltar.", ""),
+        F("must_avoid", "Nunca mostrar (proibido)", "text", None,
+          "Itens proibidos: 'marca concorrente', 'cigarro', 'texto ilegivel'. Entram automaticamente no Negative Prompt.", ""),
+    ]),
+]
+# campos que nascem marcados como pendentes (⚑)
+DEFAULT_PENDING = [f.id for _t, _n, fl in SECTIONS[_N_BASE_SECTIONS:] for f in fl]
+
 FIELD_BY_ID: dict[str, Field] = {f.id: f for _, _, fl in SECTIONS for f in fl}
 
 # ----------------------------------------------------------------------------
@@ -793,6 +939,7 @@ def new_beat(name="Nova cena", info=""):
     return {
         "name": name, "info": info, "keyword": "", "shot": "", "angle": "",
         "move": "", "action": "", "vo": "", "dur": 5, "extra": "", "auto": True,
+        "transition": "", "text": "",
     }
 
 
@@ -876,6 +1023,12 @@ BUILTIN_PRESETS = {
         "motion": 4, "consistency": 60, "aspect": "4:5 retrato (feed alto)",
         "fps": "120 fps (super slow motion)", "action": "Cozinhando / cortando",
     },
+}
+
+# modelo sem nada preenchido: tudo marcado com ⚑ (voce libera so o que quiser usar)
+BUILTIN_PRESETS["Modelo em branco (tudo pendente)"] = {
+    "_pending": [f.id for _t, _n, fl in SECTIONS for f in fl
+                 if f.id not in ("translate", "seed_lock", "negative_preset", "subject_type")],
 }
 
 # combinacoes compativeis para o Lucky Roll (sorteio coerente)
@@ -1219,9 +1372,13 @@ class Compiler:
         self.template = template or MASTER_TEMPLATE
         self.untranslated: list[str] = []
         self.tr = bool(self.s.get("translate", True))
+        # campos marcados com ⚑ (preencher depois) ficam FORA do prompt
+        self.pending = set(self.s.get("_pending") or [])
 
     # ---------------------------------------------------------------- helpers
     def g(self, fid, default=""):
+        if fid in self.pending:
+            return "" if not isinstance(default, (int, float)) else None
         v = self.s.get(fid, default)
         return v if v is not None else default
 
@@ -1305,10 +1462,11 @@ class Compiler:
             "{LUZ}": self.en("light_style"),
             "{LUZ_EXTRA}": self.free("light_extra"),
             "{COR}": self.en("grading"),
-            "{ASPECTO}": "aspect ratio %s" % self.en("aspect"),
+            "{ASPECTO}": ("aspect ratio %s" % self.en("aspect")) if self.en("aspect") else "",
             "{FPS}": self.en("fps"),
-            "{MOTION}": "motion strength %s/10" % self.g("motion", 4),
-            "{CONSISTENCIA}": "character consistency lock %s%% (same face, same outfit)" % self.g("consistency", 85),
+            "{MOTION}": ("motion strength %s/10" % self.g("motion", 4)) if self.g("motion", 4) is not None else "",
+            "{CONSISTENCIA}": ("character consistency lock %s%% (same face, same outfit)" % self.g("consistency", 85))
+            if self.g("consistency", 85) is not None else "",
             "{SEED}": ("seed %s" % seed) if seed else "",
             "{VOZ}": self.en("voice_tone"),
             "{FALA}": ('voiceover: "%s"' % vo_en) if vo_en else "",
@@ -1317,13 +1475,14 @@ class Compiler:
             "{AUDIO_EXTRA}": self.free("audio_extra"),
             # auxiliares
             "_props": self.free("props"),
-            "_neg": str(self.g("negative", "")).strip(),
-            "_dur": b.get("dur", self.g("duration", 5)),
+            "_neg": self.negative_text(b),
+            "_transition": en_of("transition", b.get("transition", "")),
+            "_dur": b.get("dur", self.g("duration", 5)) or 5,
             "_name": b.get("name", ""),
             "_kw_raw": kw,
             "_vo_raw": vo,
             "_seed": seed,
-            "_aspect": self.en("aspect"),
+            "_aspect": self.en("aspect") or "9:16",
             "_extra_params": str(self.g("extra_params", "")).strip(),
         }
 
@@ -1335,14 +1494,98 @@ class Compiler:
                 out = out.replace(k, str(v))
         if t["_props"]:
             out += "\nPROPS: %s." % t["_props"]
+        extra = self.extras_lines(beat)
+        if extra:
+            out += "\n" + "\n".join(extra)
         return tidy(out), t
+
+    # ---------------------------------------------- blocos extras (agencia)
+    def extras_lines(self, beat=None, compact=False) -> list[str]:
+        """Linhas 'TAG: texto.' dos campos extras. compact=True descarta o que nao e visual
+        (briefing e referencias), para as versoes de 1 paragrafo."""
+        b = beat or {}
+        L = []
+        brand = clean_join([str(self.g("brand_name", "")).strip(),   # nome da marca: nunca traduzir
+                            ("product: %s" % self.free("product_name")) if self.free("product_name") else "",
+                            ("brand colors: %s" % self.free("brand_colors")) if self.free("brand_colors") else "",
+                            ("logo: %s" % self.free("logo_rule")) if self.free("logo_rule") else ""])
+        if brand:
+            L.append("BRAND: %s." % brand)
+        if self.free("must_show"):
+            L.append("MUST SHOW: %s." % self.free("must_show"))
+        motion = clean_join([self.en("motion_speed"), self.en("easing"), self.en("focus_pull"),
+                             self.free("subject_motion"), self.en_multi("physics")])
+        if motion:
+            L.append("MOTION DETAIL: %s." % motion)
+        text = (b.get("text") or "").strip() or str(self.g("onscreen_text", "")).strip()
+        if text:
+            L.append("ON-SCREEN TEXT: \"%s\"%s." % (
+                text, (", " + clean_join([self.en("onscreen_pos"), self.free("onscreen_style")]))
+                if clean_join([self.en("onscreen_pos"), self.free("onscreen_style")]) else ""))
+        if self.free("continuity"):
+            L.append("CONTINUITY (identical in every scene): %s." % self.free("continuity"))
+        if not compact:
+            brief = clean_join([
+                ("goal: %s" % self.free("brief_goal")) if self.free("brief_goal") else "",
+                ("audience: %s" % self.free("brief_audience")) if self.free("brief_audience") else "",
+                ("tone: %s" % self.free("brief_tone")) if self.free("brief_tone") else "",
+                ("call to action: %s" % self.free("cta_text")) if self.free("cta_text") else ""])
+            if brief:
+                L.append("BRIEF: %s." % brief)
+            ref = self.ref_block()
+            if ref:
+                L.append(ref)
+        return L
+
+    def negative_text(self, beat=None) -> str:
+        """Negative base + 'Nunca mostrar'. Se a cena pede texto na tela / logo, tira 'text',
+        'subtitle' e 'logo' do negativo (senao um contradiz o outro)."""
+        items = [x.strip() for x in str(self.g("negative", "")).split(",") if x.strip()]
+        has_text = bool(((beat or {}).get("text") or "").strip() or str(self.g("onscreen_text", "")).strip())
+        has_logo = bool(str(self.g("logo_rule", "")).strip())
+        drop = set()
+        if has_text:
+            drop |= {"text", "subtitle", "subtitles", "captions", "text artifacts"}
+        if has_logo:
+            drop |= {"logo"}
+        items = [x for x in items if x.lower() not in drop]
+        return clean_join(items + [self.free("must_avoid")])
+
+    def ref_block(self) -> str:
+        parts = []
+        mode = self.en("ref_mode")
+        img = str(self.g("ref_image", "")).strip()
+        first = str(self.g("ref_first", "")).strip()
+        last = str(self.g("ref_last", "")).strip()
+        w = self.g("ref_weight", 60)
+        if mode and img:
+            parts.append("%s: %s (weight %s%%)" % (mode, img, w if w is not None else 60))
+        elif img:
+            parts.append("reference image: %s" % img)
+        if first:
+            parts.append("start frame: %s" % first)
+        if last:
+            parts.append("end frame: %s" % last)
+        return ("REFERENCE: %s." % "; ".join(parts)) if parts else ""
+
+    def mj_ref_flags(self) -> list[str]:
+        img = str(self.g("ref_image", "")).strip()
+        if not img:
+            return []
+        w = self.g("ref_weight", 60)
+        w = 60 if w is None else int(w)
+        mode = str(self.g("ref_mode", ""))
+        if "estilo" in mode or "cenario" in mode:
+            return ["--sref %s" % img, "--sw %d" % w]
+        return ["--cref %s" % img, "--cw %d" % w]
 
     # ---------------------------------------------------------- plataformas
     def one_line(self, beat=None, index=0) -> tuple[str, dict]:
         """Versao de 1 paragrafo, sem cabecalhos (para MJ / Runway / Luma)."""
         full, t = self.render(beat, index)
-        body = " ".join(l.split(":", 1)[-1].strip() if re.match(r"^[A-Z]+:", l) else l
-                        for l in full.split("\n") if not l.startswith("AUDIO:"))
+        drop = ("AUDIO:", "BRIEF:", "REFERENCE:")
+        body = " ".join(l.split(":", 1)[-1].strip() if re.match(r"^[A-Z][A-Z \-]+:", l) else l
+                        for l in full.split("\n") if not l.startswith(drop))
         body = re.sub(r"\s+", " ", body).strip()
         return body, t
 
@@ -1364,7 +1607,7 @@ class Compiler:
 
         if platform == "midjourney":
             body, t = self.one_line(self.beats[0] if self.beats else None, 0)
-            flags = ["--ar %s" % t["_aspect"], "--style raw", "--s 250"]
+            flags = ["--ar %s" % t["_aspect"], "--style raw", "--s 250"] + self.mj_ref_flags()
             if t["_seed"]:
                 flags.append("--seed %s" % t["_seed"])
             if t["_neg"]:
@@ -1376,7 +1619,7 @@ class Compiler:
                 if not b.get("keyword"):
                     continue
                 line, tt = self.one_line(b, i)
-                f = ["--ar %s" % tt["_aspect"], "--style raw", "--s 250"]
+                f = ["--ar %s" % tt["_aspect"], "--style raw", "--s 250"] + self.mj_ref_flags()
                 if tt["_seed"]:
                     f.append("--seed %s" % tt["_seed"])
                 if tt["_neg"]:
@@ -1386,19 +1629,24 @@ class Compiler:
 
         if platform == "runway":
             lines = [head]
+            if self.ref_block():
+                lines.append(self.ref_block() + "  (anexe a imagem no campo 'Image' do Runway)\n")
             for i, b in enumerate(self.beats or [None]):
                 t = self.tokens(b, i)
                 scene = clean_join([t["{ENQUADRAMENTO}"], t["{ANGULO}"], t["{SUJEITO}"],
                                     t["{ACAO}"], t["{PALAVRA_CHAVE}"].lstrip(", "),
                                     t["{AMBIENTE}"], t["{LUZ}"], t["{COR}"], t["{ESTILO}"]])
-                lines.append("[%d] %s: %s. %s, %s." % (
+                lines.append("[%d] %s: %s. %s, %s. %s" % (
                     i + 1, t["{MOVIMENTO}"] or "static shot", scene,
-                    t["{LENTE}"], t["{ABERTURA}"]))
+                    t["{LENTE}"], t["{ABERTURA}"],
+                    " ".join(self.extras_lines(b, compact=True))))
             lines.append("\n(Runway nao usa negative prompt - os defeitos foram evitados por descricao positiva.)")
             return "\n".join(lines)
 
         if platform == "kling":
             blocks = [head]
+            if self.ref_block():
+                blocks.append(self.ref_block() + "  (use 'Start frame' / 'End frame' e 'Character reference' do Kling)")
             for i, b in enumerate(self.beats or [None]):
                 t = self.tokens(b, i)
                 dur = 10 if int(t["_dur"] or 5) > 5 else 5
@@ -1415,6 +1663,8 @@ class Compiler:
 
         if platform == "luma":
             out = [head]
+            if self.ref_block():
+                out.append(self.ref_block() + "  (use Keyframes: start / end no Luma)")
             for i, b in enumerate(self.beats or [None]):
                 t = self.tokens(b, i)
                 prose = ("%s. The camera does a %s. %s, %s. %s, %s. %s." % (
@@ -1422,6 +1672,7 @@ class Compiler:
                                 t["{PALAVRA_CHAVE}"].lstrip(", ")]),
                     t["{MOVIMENTO}"] or "static hold", t["{AMBIENTE}"], t["{HORARIO}"],
                     t["{LUZ}"], t["{COR}"], t["{ESTILO}"]))
+                prose += " " + " ".join(self.extras_lines(b, compact=True))
                 out.append("[%d] %s" % (i + 1, re.sub(r"\s+", " ", prose)))
             return "\n\n".join(out)
 
@@ -1432,6 +1683,9 @@ class Compiler:
                 glob["{ESTILO}"], glob["{CAMERA}"], glob["{LUZ}"], glob["{COR}"]))
             out.append("CHARACTER (keep identical in every scene): %s%s%s. %s" % (
                 glob["{SUJEITO}"], glob["{ROUPA}"], glob["{CABELO}"], glob["{CONSISTENCIA}"]))
+            for ln in self.extras_lines(None, compact=False):
+                if ln.startswith(("BRAND:", "BRIEF:", "REFERENCE:", "CONTINUITY", "MUST SHOW:")):
+                    out.append(ln)
             out.append("")
             for i, b in enumerate(self.beats or [None]):
                 t = self.tokens(b, i)
@@ -1445,6 +1699,11 @@ class Compiler:
                 out.append("  Audio: %s" % audio)
                 if t["{FALA}"]:
                     out.append("  Dialogue: %s" % t["{FALA}"].replace("voiceover: ", ""))
+                for ln in self.extras_lines(b, compact=True):
+                    if ln.startswith(("MOTION DETAIL:", "ON-SCREEN")):
+                        out.append("  " + ln)
+                if t["_transition"] and i < len(self.beats) - 1:
+                    out.append("  Transition to next scene: %s" % t["_transition"])
                 out.append("")
             if platform == "veo":
                 out.append("NOTE: Veo 3 generates synced audio - keep dialogue short and inside quotes.")
@@ -1471,6 +1730,8 @@ class Compiler:
             rows.append("PROMPT: %s" % line)
             if t["{FALA}"]:
                 rows.append("FALA: %s" % t["{FALA}"])
+            if t["_transition"] and i < len(self.beats) - 1:
+                rows.append("TRANSICAO PARA A PROXIMA: %s" % t["_transition"])
         return "\n".join(rows)
 
     def project_dict(self) -> dict:
@@ -1715,6 +1976,9 @@ class App(tk.Tk):
         self.beat_vars: list[dict] = []
         self.out_cache: dict[str, str] = {}
         self.hint_updaters: list = []
+        self.pending: dict[str, tk.BooleanVar] = {}
+        self.field_labels: dict[str, tk.Label] = {}
+        self.field_tab: dict[str, str] = {}
 
         os.makedirs(PRESET_DIR, exist_ok=True)
         os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -1725,7 +1989,8 @@ class App(tk.Tk):
         self.nb = ttk.Notebook(self)
         self.nb.pack(fill="both", expand=True, padx=10, pady=(6, 4))
 
-        for tabname in ["Personagem", "Ambiente", "Camera", "Luz & Cor", "Audio & Voz", "Motor de IA"]:
+        for tabname in ["Personagem", "Ambiente", "Camera", "Luz & Cor", "Audio & Voz", "Motor de IA",
+                        "Referencias & Texto", "Marca & Briefing"]:
             self._build_field_tab(tabname)
         self._build_script_tab()
         self._build_dict_tab()
@@ -1737,6 +2002,7 @@ class App(tk.Tk):
         self.status.pack(fill="x", side="bottom")
 
         self.apply_preset("Vlog UGC", silent=True)
+        self.set_pending(DEFAULT_PENDING)
         self.render_beats()
         self.say("Preset inicial 'Vlog UGC' carregado. Altere um campo e clique em GERAR PROMPT.")
 
@@ -1771,6 +2037,10 @@ class App(tk.Tk):
                       activebackground=CLR["accent"], activeforeground="#0e1016")
         fer.add_command(label="Lucky Roll (sorteio cinematografico)", command=self.lucky_roll)
         fer.add_command(label="Gerar nova seed aleatoria", command=self.random_seed)
+        fer.add_command(label="⚑ Ver campos pendentes...", command=self.show_pending)
+        fer.add_command(label="⚑ Marcar TODOS os campos como pendentes (modelo em branco)", command=self.mark_all_pending)
+        fer.add_command(label="⚑ Remover todas as marcacoes", command=self.clear_all_pending)
+        fer.add_separator()
         fer.add_command(label="Restaurar blocos narrativos padrao", command=self.reset_beats)
         fer.add_command(label="Restaurar template da formula", command=self.reset_template)
         m.add_cascade(label="Ferramentas", menu=fer)
@@ -1797,6 +2067,8 @@ class App(tk.Tk):
         ttk.Button(bar, text="⚡ GERAR PROMPT", style="Accent.TButton",
                    command=self.generate).pack(side="right", padx=(8, 0))
         ttk.Button(bar, text="🎲 Lucky Roll", command=self.lucky_roll).pack(side="right", padx=4)
+        self.pend_btn = ttk.Button(bar, text="⚑ Pendentes: 0", command=self.show_pending)
+        self.pend_btn.pack(side="right", padx=4)
 
         self.preset_var = tk.StringVar(value="Vlog UGC")
         cb = ttk.Combobox(bar, textvariable=self.preset_var, width=20, state="readonly",
@@ -1818,14 +2090,27 @@ class App(tk.Tk):
             grid.pack(fill="x", padx=6, pady=8)
             grid.columnconfigure(1, weight=1)
             for r, f in enumerate(fields):
+                self.field_tab[f.id] = tabname
                 self._build_field_row(grid, f, r)
 
     def _build_field_row(self, grid, f: Field, r: int):
         left = tk.Frame(grid, bg=CLR["panel"])
         left.grid(row=r * 2, column=0, sticky="nw", padx=(6, 12), pady=(8, 0))
-        tk.Label(left, text=f.label, bg=CLR["panel"], fg=CLR["fg"], font=FONT_B,
-                 anchor="w", justify="left", wraplength=230).pack(side="left")
+        lab = tk.Label(left, text=f.label, bg=CLR["panel"], fg=CLR["fg"], font=FONT_B,
+                       anchor="w", justify="left", wraplength=230)
+        lab.pack(side="left")
         InfoIcon(left, f.label, f.info).pack(side="left", padx=(6, 0))
+        self.field_labels[f.id] = lab
+        pv = tk.BooleanVar(value=(f.id in DEFAULT_PENDING))
+        self.pending[f.id] = pv
+        pk = tk.Checkbutton(left, text="⚑", variable=pv, bg=CLR["panel"], fg=CLR["accent2"],
+                            activebackground=CLR["panel"], activeforeground=CLR["accent2"],
+                            selectcolor=CLR["field"], bd=0, highlightthickness=0, cursor="hand2",
+                            font=FONT_B, command=lambda _id=f.id: self._pending_changed(_id))
+        pk.pack(side="left", padx=(8, 0))
+        Tooltip(pk, "⚑ Preencher depois\nMarcado: o campo fica FORA do prompt e entra na lista de pendencias.\n"
+                    "Desmarque quando quiser usar. Ao digitar no campo, a marca sai sozinha.")
+        self._pending_changed(f.id)
 
         cell = tk.Frame(grid, bg=CLR["panel"])
         cell.grid(row=r * 2, column=1, sticky="ew", padx=(0, 10), pady=(8, 0))
@@ -1849,12 +2134,16 @@ class App(tk.Tk):
                     self.set_text("negative", NEGATIVE_PRESETS.get(_v.get(), NEGATIVE_BASE))
             cb.bind("<<ComboboxSelected>>", upd)
             cb.bind("<KeyRelease>", upd)
+            cb.bind("<<ComboboxSelected>>", lambda e, _id=f.id: self._touch(_id), add="+")
+            cb.bind("<KeyRelease>", lambda e, _id=f.id: self._touch(_id), add="+")
             self.hint_updaters.append(upd)
             upd()
 
         elif kind == "entry":
             var = tk.StringVar(value=str(f.default))
-            ttk.Entry(cell, textvariable=var).grid(row=0, column=0, sticky="ew")
+            ent = ttk.Entry(cell, textvariable=var)
+            ent.grid(row=0, column=0, sticky="ew")
+            ent.bind("<KeyRelease>", lambda e, _id=f.id: self._touch(_id), add="+")
             self.vars[f.id] = var
             hint.grid_remove()
 
@@ -1862,6 +2151,7 @@ class App(tk.Tk):
             t = make_text(cell, height=4 if f.id in ("negative", "char_desc") else 3)
             t.grid(row=0, column=0, sticky="ew")
             t.insert("1.0", str(f.default))
+            t.bind("<KeyRelease>", lambda e, _id=f.id: self._touch(_id), add="+")
             self.texts[f.id] = t
             hint.grid_remove()
 
@@ -1876,7 +2166,8 @@ class App(tk.Tk):
                 self.checks[f.id][o.label] = bv
                 cell_f = tk.Frame(holder, bg=CLR["panel"])
                 cell_f.grid(row=i // cols, column=i % cols, sticky="w", padx=(0, 14), pady=1)
-                ttk.Checkbutton(cell_f, text=o.label, variable=bv).pack(side="left")
+                ttk.Checkbutton(cell_f, text=o.label, variable=bv,
+                                command=lambda _id=f.id: self._touch(_id)).pack(side="left")
                 InfoIcon(cell_f, o.label, o.info, size=13).pack(side="left", padx=(4, 0))
             hint.configure(text="↳ marque as opcoes que devem entrar no prompt")
 
@@ -1889,7 +2180,8 @@ class App(tk.Tk):
             val = tk.Label(row, text=str(f.default), bg=CLR["panel"], fg=CLR["accent"],
                            font=FONT_B, width=5)
             sc = ttk.Scale(row, from_=lo, to=hi, orient="horizontal",
-                           command=lambda v, _v=var, _l=val: (_v.set(int(float(v))), _l.configure(text=str(int(float(v))))))
+                           command=lambda v, _v=var, _l=val, _id=f.id: (
+                               _v.set(int(float(v))), _l.configure(text=str(int(float(v)))), self._touch(_id)))
             sc.set(int(f.default))
             sc.grid(row=0, column=0, sticky="ew")
             val.grid(row=0, column=1, padx=(8, 0))
@@ -1909,6 +2201,70 @@ class App(tk.Tk):
             self.vars[f.id] = var
             hint.grid_remove()
 
+    # ------------------------------------------------------------ pendencias ⚑
+    def _pending_changed(self, fid):
+        lab = self.field_labels.get(fid)
+        on = bool(self.pending[fid].get()) if fid in self.pending else False
+        if lab is not None:
+            lab.configure(fg=CLR["accent2"] if on else CLR["fg"])
+        self._update_pending_count()
+
+    def _touch(self, fid):
+        """O usuario mexeu no campo: tira a marca ⚑ sozinha (senao o valor seria ignorado)."""
+        pv = self.pending.get(fid)
+        if pv is not None and pv.get():
+            pv.set(False)
+            self._pending_changed(fid)
+
+    def _update_pending_count(self):
+        n = sum(1 for v in self.pending.values() if v.get())
+        if hasattr(self, "pend_btn"):
+            self.pend_btn.configure(text="⚑ Pendentes: %d" % n)
+
+    def set_pending(self, ids):
+        ids = set(ids)
+        for fid, pv in self.pending.items():
+            pv.set(fid in ids)
+            self._pending_changed(fid)
+
+    def mark_all_pending(self):
+        keep = {"translate", "seed_lock", "negative_preset", "subject_type"}
+        self.set_pending([fid for fid in FIELD_BY_ID if fid not in keep])
+        self.say("Todos os campos marcados como ⚑ pendentes. Desmarque so os que quiser usar.", CLR["accent2"])
+
+    def clear_all_pending(self):
+        self.set_pending([])
+        self.say("Marcacoes ⚑ removidas: todos os campos preenchidos entram no prompt.", CLR["ok"])
+
+    def show_pending(self):
+        win = tk.Toplevel(self)
+        win.title("Campos pendentes (⚑)")
+        win.geometry("560x520")
+        win.configure(bg=CLR["panel"])
+        tk.Label(win, text="Campos marcados para preencher depois (ficam fora do prompt).\n"
+                           "Duplo clique: ir ate o campo.", bg=CLR["panel"], fg=CLR["fg_dim"],
+                 font=FONT, justify="left").pack(anchor="w", padx=14, pady=(12, 6))
+        lb = tk.Listbox(win, bg=CLR["field"], fg=CLR["fg"], font=FONT, selectbackground=CLR["accent"],
+                        selectforeground="#0e1016", bd=0, highlightthickness=0, activestyle="none")
+        lb.pack(fill="both", expand=True, padx=14, pady=(0, 14))
+        items = [(self.field_tab.get(fid, "?"), FIELD_BY_ID[fid].label, fid)
+                 for fid, pv in self.pending.items() if pv.get()]
+        for tab, label, _fid in items:
+            lb.insert("end", "%-22s  %s" % (tab, label))
+        if not items:
+            lb.insert("end", "(nenhum campo pendente)")
+
+        def go(_e=None):
+            sel = lb.curselection()
+            if not sel or not items:
+                return
+            tab = items[sel[0]][0]
+            for i in range(self.nb.index("end")):
+                if self.nb.tab(i, "text") == tab:
+                    self.nb.select(i)
+                    break
+        lb.bind("<Double-Button-1>", go)
+
     # ------------------------------------------------------------ estado
     def set_text(self, fid, value):
         t = self.texts.get(fid)
@@ -1927,9 +2283,12 @@ class App(tk.Tk):
                 st[fid] = self.vars[fid].get()
             else:
                 st[fid] = f.default
+        st["_pending"] = [fid for fid, pv in self.pending.items() if pv.get()]
         return st
 
     def set_state(self, data: dict):
+        if data and "_pending" in data:
+            self.set_pending(data["_pending"] or [])
         for fid, val in (data or {}).items():
             f = FIELD_BY_ID.get(fid)
             if not f:
@@ -2171,6 +2530,8 @@ class App(tk.Tk):
             "extra": tk.StringVar(value=b.get("extra", "")),
             "dur": tk.IntVar(value=int(b.get("dur", 5) or 5)),
             "auto": tk.BooleanVar(value=bool(b.get("auto", True))),
+            "transition": tk.StringVar(value=b.get("transition", "")),
+            "text": tk.StringVar(value=b.get("text", "")),
         }
         self.beat_vars.append(v)
 
@@ -2256,10 +2617,21 @@ class App(tk.Tk):
                   "'brilho da tela refletindo nos dedos'. E o que da realismo ao plano.", 6, 0)
         ttk.Entry(g, textvariable=v["extra"]).grid(row=6, column=1, columnspan=3, sticky="ew", padx=(0, 8))
 
+        # linha 7: transicao + texto na tela (opcionais)
+        self._lab(g, "Transicao p/ proxima cena",
+                  "Como esta cena passa para a seguinte (corte seco, match cut, whip pan, dissolve...). "
+                  "Opcional: vazio = corte seco. Aparece na Shot List e em Sora/Veo.", 7, 0)
+        ttk.Combobox(g, textvariable=v["transition"], values=opt_list("transition")).grid(
+            row=7, column=1, sticky="ew", padx=(0, 8))
+        self._lab(g, "Texto na tela (cena)",
+                  "Texto escrito na tela so nesta cena. Vazio = usa o texto global da aba 'Referencias & Texto'. "
+                  "Prefira poucas palavras.", 7, 2)
+        ttk.Entry(g, textvariable=v["text"]).grid(row=7, column=3, sticky="ew", padx=(0, 8))
+
         if b.get("info"):
             tk.Label(g, text="O que escrever aqui: " + b["info"], bg=CLR["panel"], fg=CLR["fg_dim"],
                      font=("Segoe UI", 8), anchor="w", justify="left", wraplength=1150
-                     ).grid(row=7, column=0, columnspan=4, sticky="ew", padx=6, pady=(6, 2))
+                     ).grid(row=8, column=0, columnspan=4, sticky="ew", padx=6, pady=(6, 2))
         on_kw()
 
     def read_beats(self):
@@ -2278,6 +2650,8 @@ class App(tk.Tk):
             except Exception:
                 b["dur"] = 5
             b["auto"] = bool(v["auto"].get())
+            b["transition"] = v["transition"].get()
+            b["text"] = v["text"].get()
 
     def add_beat(self):
         self.read_beats()
@@ -2561,6 +2935,7 @@ class App(tk.Tk):
         if not messagebox.askyesno("Novo projeto", "Limpar todos os campos e voltar ao padrao?"):
             return
         self.set_state({fid: f.default for fid, f in FIELD_BY_ID.items()})
+        self.set_pending(DEFAULT_PENDING)
         self.beats = default_beats()
         self.render_beats()
         self.reset_template()
