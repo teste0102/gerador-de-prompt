@@ -2,3 +2,4 @@ dados/usuario.json
 saidas/
 __pycache__/
 *.pyc
+historico/

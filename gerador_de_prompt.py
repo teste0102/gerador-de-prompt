@@ -54,6 +54,7 @@ APP_NAME = "Gerador de Prompt Universal"
 APP_VERSION = "1.0"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PRESET_DIR = os.path.join(BASE_DIR, "presets")
+HIST_DIR = os.path.join(BASE_DIR, "historico")
 OUTPUT_DIR = os.path.join(BASE_DIR, "saidas")
 DATA_DIR = os.path.join(BASE_DIR, "dados")
 
@@ -1756,6 +1757,79 @@ class Compiler:
             "untranslated_words": self.untranslated,
         }
 
+
+# ----------------------------------------------------------------------------
+# VERIFICADOR (checklist antes de gerar)
+# ----------------------------------------------------------------------------
+# Limites APROXIMADOS de caracteres por cena em cada plataforma. Mudam com as versoes dos
+# modelos: se a plataforma atualizar, ajuste aqui.
+PLATFORM_LIMITS = {"midjourney": 6000, "runway": 1000, "kling": 2500, "luma": 3000}
+
+
+def preflight(comp: "Compiler", platform: str) -> list[tuple[str, str]]:
+    """Retorna [(nivel, mensagem)] com nivel 'erro' | 'aviso' | 'ok'."""
+    out: list[tuple[str, str]] = []
+    st, pend = comp.s, comp.pending
+
+    def filled(fid):
+        v = st.get(fid)
+        return fid not in pend and bool(v if not isinstance(v, (int, float)) else True) and v != ""
+
+    if not comp.beats:
+        out.append(("erro", "O roteiro esta vazio: adicione pelo menos uma cena."))
+    if not (filled("char_id") or filled("char_desc")):
+        out.append(("aviso", "Personagem sem ID e sem descricao fisica (a IA vai inventar uma pessoa diferente a cada cena)."))
+    if not (filled("camera_body") or filled("lens")):
+        out.append(("aviso", "Sem camera e sem lente definidas: o 'look' ficara aleatorio."))
+    if not filled("light_style"):
+        out.append(("aviso", "Sem estilo de luz definido."))
+    if platform not in ("runway", "shotlist", "json") and not str(comp.negative_text()).strip():
+        out.append(("aviso", "Negative Prompt vazio (anatomia errada, texto e marca d'agua podem aparecer)."))
+    for i, b in enumerate(comp.beats):
+        if not (b.get("keyword") or "").strip():
+            out.append(("aviso", "Cena %d (%s) sem palavra-chave." % (i + 1, b.get("name", ""))))
+    # campo marcado ⚑ mas com conteudo digitado (sera ignorado)
+    ign = [FIELD_BY_ID[f].label for f in pend
+           if f in FIELD_BY_ID and f not in DEFAULT_PENDING
+           and st.get(f) not in ("", None, [], False) and FIELD_BY_ID[f].kind in ("entry", "text", "combo", "checks")]
+    if ign:
+        out.append(("aviso", "Campos com conteudo mas marcados ⚑ (ficam FORA do prompt): " + ", ".join(ign[:8])
+                    + (" ..." if len(ign) > 8 else "")))
+    seed = str(st.get("seed", "")).strip()
+    if "seed" not in pend and seed and not re.fullmatch(r"\d+", seed):
+        out.append(("erro", "Seed deve ser um numero inteiro (esta: '%s')." % seed))
+    if str(st.get("ref_image", "")).strip() and not str(st.get("ref_mode", "")).strip():
+        out.append(("aviso", "Imagem de referencia sem 'Tipo de referencia' (personagem, estilo, produto...)."))
+    if platform == "midjourney" and (str(st.get("ref_first", "")).strip() or str(st.get("ref_last", "")).strip()):
+        out.append(("aviso", "Midjourney gera imagem: primeiro/ultimo frame nao tem efeito la."))
+    ost = str(st.get("onscreen_text", "")).strip()
+    if ost and len(ost) > 40:
+        out.append(("aviso", "Texto na tela com %d caracteres: IA de video erra letras, prefira ate ~40." % len(ost)))
+    if comp.untranslated:
+        out.append(("aviso", "Palavras fora do glossario (saem sem traducao): " + ", ".join(comp.untranslated[:10])))
+    # item proibido aparecendo no prompt positivo
+    try:
+        full = comp.build(platform)
+    except Exception:
+        full = ""
+    positive = re.split(r"NEGATIVE|--no ", full)[0].lower()
+    for item in [x.strip() for x in comp.free("must_avoid").split(",") if x.strip()]:
+        if len(item) > 3 and item.lower() in positive:
+            out.append(("erro", "Item proibido '%s' aparece no prompt." % item))
+    # limite de caracteres por cena (mede o texto que realmente vai para a plataforma)
+    lim = PLATFORM_LIMITS.get(platform)
+    if lim:
+        pat = {"midjourney": r"^(?:/imagine prompt: \[\d+\] )?(.+?)\s--ar", "runway": r"^\[\d+\] (.+)$",
+               "luma": r"^\[\d+\] (.+)$", "kling": r"^Prompt: (.+)$"}.get(platform)
+        sizes = [len(m) for m in re.findall(pat, full, re.M)] if pat else []
+        over = [(i + 1, n) for i, n in enumerate(sizes) if n > lim]
+        if over:
+            out.append(("aviso", "%d cena(s) acima do limite aproximado de %s (%d caracteres); maior: cena %d com %d. "
+                                 "Encurte ou marque campos como ⚑." % (len(over), platform, lim, *max(over, key=lambda x: x[1]))))
+    if not any(l in ("erro", "aviso") for l, _ in out):
+        out.append(("ok", "Tudo certo: nenhum problema encontrado."))
+    return out
+
 # ============================================================================
 #  WIDGETS DE INTERFACE
 # ============================================================================
@@ -2020,8 +2094,10 @@ class App(tk.Tk):
         arq.add_command(label="Novo projeto (limpar)", command=self.new_project)
         arq.add_command(label="Abrir projeto/preset .json...", command=self.load_preset_file)
         arq.add_command(label="Salvar projeto/preset .json...", command=self.save_preset_file)
+        arq.add_command(label="Historico de versoes geradas...", command=self.show_history)
         arq.add_separator()
         arq.add_command(label="Exportar prompt .txt...", command=self.export_txt)
+        arq.add_command(label="Exportar todos os formatos (9:16, 1:1, 16:9) + versao B...", command=self.export_multi)
         arq.add_command(label="Exportar projeto completo .json...", command=self.export_json)
         arq.add_separator()
         arq.add_command(label="Sair", command=self.destroy)
@@ -2037,6 +2113,7 @@ class App(tk.Tk):
                       activebackground=CLR["accent"], activeforeground="#0e1016")
         fer.add_command(label="Lucky Roll (sorteio cinematografico)", command=self.lucky_roll)
         fer.add_command(label="Gerar nova seed aleatoria", command=self.random_seed)
+        fer.add_command(label="Verificar antes de gerar (checklist)", command=lambda: (self.nb.select(self.nb.index("end") - 1), self.generate(switch=False)))
         fer.add_command(label="⚑ Ver campos pendentes...", command=self.show_pending)
         fer.add_command(label="⚑ Marcar TODOS os campos como pendentes (modelo em branco)", command=self.mark_all_pending)
         fer.add_command(label="⚑ Remover todas as marcacoes", command=self.clear_all_pending)
@@ -2065,7 +2142,7 @@ class App(tk.Tk):
                  bg=CLR["bg"], fg=CLR["fg_dim"], font=FONT).pack(side="left")
 
         ttk.Button(bar, text="⚡ GERAR PROMPT", style="Accent.TButton",
-                   command=self.generate).pack(side="right", padx=(8, 0))
+                   command=lambda: self.generate(save=True)).pack(side="right", padx=(8, 0))
         ttk.Button(bar, text="🎲 Lucky Roll", command=self.lucky_roll).pack(side="right", padx=4)
         self.pend_btn = ttk.Button(bar, text="⚑ Pendentes: 0", command=self.show_pending)
         self.pend_btn.pack(side="right", padx=4)
@@ -2762,10 +2839,11 @@ class App(tk.Tk):
                  "\n\n".join("%s: %s" % (lbl, PLATFORM_NOTES[k]) for k, lbl in PLATFORMS)).pack(side="left")
 
         ttk.Button(b, text="⚡ Gerar / Atualizar", style="Accent.TButton",
-                   command=self.generate).pack(side="left", padx=(14, 4))
+                   command=lambda: self.generate(save=True)).pack(side="left", padx=(14, 4))
         ttk.Button(b, text="Copiar", command=self.copy_out).pack(side="left", padx=4)
         ttk.Button(b, text="Salvar .txt", command=self.export_txt).pack(side="left", padx=4)
         ttk.Button(b, text="Salvar .json", command=self.export_json).pack(side="left", padx=4)
+        ttk.Button(b, text="Todos os formatos...", command=self.export_multi).pack(side="left", padx=4)
 
         self.online_var = tk.BooleanVar(value=False)
         has_online = online_available()
@@ -2796,7 +2874,10 @@ class App(tk.Tk):
 
         self.warn = tk.Label(wrap, text="", bg=CLR["panel"], fg=CLR["warn"], font=("Segoe UI", 8),
                              anchor="w", justify="left", wraplength=1250)
-        self.warn.pack(fill="x", padx=14, pady=(0, 8))
+        self.warn.pack(fill="x", padx=14, pady=(0, 2))
+        self.check_lbl = tk.Label(wrap, text="", bg=CLR["panel"], fg=CLR["ok"], font=("Segoe UI", 9),
+                                  anchor="w", justify="left", wraplength=1250)
+        self.check_lbl.pack(fill="x", padx=14, pady=(0, 10))
 
     # ================================================================== ACOES
     def compiler(self) -> Compiler:
@@ -2804,7 +2885,7 @@ class App(tk.Tk):
         return Compiler(self.get_state(), self.beats,
                         self.template_text.get("1.0", "end-1c"))
 
-    def generate(self, switch=True):
+    def generate(self, switch=True, save=False):
         ONLINE["enabled"] = bool(getattr(self, "online_var", None) and self.online_var.get())
         comp = self.compiler()
         key = self.plat_map.get(self.plat_var.get(), "universal")
@@ -2816,6 +2897,9 @@ class App(tk.Tk):
         self.out_text.delete("1.0", "end")
         self.out_text.insert("1.0", txt)
         self.plat_note.configure(text="ⓘ " + PLATFORM_NOTES.get(key, ""))
+        self.show_checklist(comp, key)
+        if save:
+            self.save_history(comp, key, txt)
         if comp.untranslated:
             self.warn.configure(
                 text="Tradutor - revisar: o glossario nao reconheceu estas palavras e elas sairam como estao -> "
@@ -2826,6 +2910,140 @@ class App(tk.Tk):
         if switch:
             self.nb.select(self.nb.index("end") - 1)
         self.say("Prompt gerado para %s - %d cena(s)." % (self.plat_var.get(), len(self.beats)), CLR["ok"])
+
+
+    # ------------------------------------------------------------ checklist
+    def show_checklist(self, comp=None, key=None):
+        comp = comp or self.compiler()
+        key = key or self.plat_map.get(self.plat_var.get(), "universal")
+        res = preflight(comp, key)
+        icon = {"erro": "✖", "aviso": "▲", "ok": "✓"}
+        self.check_lbl.configure(
+            text="Verificador:  " + "\n".join("%s %s" % (icon[l], m) for l, m in res),
+            fg=CLR["warn"] if any(l == "erro" for l, _ in res)
+            else CLR["accent2"] if any(l == "aviso" for l, _ in res) else CLR["ok"])
+
+    # ------------------------------------------------------------ historico
+    def save_history(self, comp, key, txt):
+        try:
+            os.makedirs(HIST_DIR, exist_ok=True)
+            self.read_beats()
+            data = {"_type": "gerador-de-prompt-historico",
+                    "saved_at": datetime.datetime.now().isoformat(timespec="seconds"),
+                    "platform": key, "fields": self.get_state(), "beats": self.beats,
+                    "template": self.template_text.get("1.0", "end-1c"), "prompt": txt}
+            sig = hash(json.dumps([data["fields"], data["beats"], data["template"], key], sort_keys=True, default=str))
+            if sig == getattr(self, "_hist_sig", None):
+                return
+            self._hist_sig = sig
+            name = datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S") + ".json"
+            with open(os.path.join(HIST_DIR, name), "w", encoding="utf-8") as fh:
+                json.dump(data, fh, ensure_ascii=False, indent=1)
+            files = sorted(f for f in os.listdir(HIST_DIR) if f.endswith(".json"))
+            for old in files[:-100]:
+                os.remove(os.path.join(HIST_DIR, old))
+        except Exception as exc:
+            self.say("Historico nao salvo: %s" % exc, CLR["warn"])
+
+    def show_history(self):
+        files = sorted((f for f in (os.listdir(HIST_DIR) if os.path.isdir(HIST_DIR) else []) if f.endswith(".json")),
+                       reverse=True)
+        win = tk.Toplevel(self)
+        win.title("Historico de versoes geradas")
+        win.geometry("700x520")
+        win.configure(bg=CLR["panel"])
+        tk.Label(win, text="Cada vez que voce clica em GERAR PROMPT a versao e guardada (ultimas 100).\n"
+                           "Duplo clique ou 'Restaurar': volta todos os campos e o roteiro daquela versao.",
+                 bg=CLR["panel"], fg=CLR["fg_dim"], font=FONT, justify="left").pack(anchor="w", padx=14, pady=(12, 6))
+        lb = tk.Listbox(win, bg=CLR["field"], fg=CLR["fg"], font=FONT, selectbackground=CLR["accent"],
+                        selectforeground="#0e1016", bd=0, highlightthickness=0, activestyle="none")
+        lb.pack(fill="both", expand=True, padx=14, pady=(0, 8))
+        rows = []
+        for f in files:
+            try:
+                with open(os.path.join(HIST_DIR, f), encoding="utf-8") as fh:
+                    d = json.load(fh)
+            except Exception:
+                continue
+            kws = ", ".join(b.get("keyword", "") for b in d.get("beats", []) if b.get("keyword"))[:60]
+            lb.insert("end", "%s   %-11s  %s" % (d.get("saved_at", f).replace("T", " "), d.get("platform", ""), kws))
+            rows.append(d)
+        if not rows:
+            lb.insert("end", "(historico vazio - gere um prompt primeiro)")
+
+        def restore(_e=None):
+            sel = lb.curselection()
+            if not sel or not rows:
+                return
+            d = rows[sel[0]]
+            self.set_state(d.get("fields", {}))
+            if d.get("beats"):
+                self.beats = [dict(new_beat(), **b) for b in d["beats"]]
+                self.render_beats()
+            if d.get("template"):
+                self.template_text.delete("1.0", "end")
+                self.template_text.insert("1.0", d["template"])
+            self.out_text.delete("1.0", "end")
+            self.out_text.insert("1.0", d.get("prompt", ""))
+            self.say("Versao de %s restaurada." % d.get("saved_at", ""), CLR["ok"])
+            win.destroy()
+        lb.bind("<Double-Button-1>", restore)
+        ttk.Button(win, text="Restaurar versao selecionada", command=restore).pack(pady=(0, 14))
+
+    # ------------------------------------------------- todos os formatos / A-B
+    def export_multi(self):
+        win = tk.Toplevel(self)
+        win.title("Exportar todos os formatos")
+        win.geometry("520x330")
+        win.configure(bg=CLR["panel"])
+        tk.Label(win, text="Gera o MESMO roteiro em varios formatos de tela (e a versao B do gancho)\n"
+                           "para a plataforma escolhida na aba Saida.", bg=CLR["panel"], fg=CLR["fg_dim"],
+                 font=FONT, justify="left").pack(anchor="w", padx=14, pady=(14, 8))
+        ratios = [("9:16", "9:16 vertical (Reels/TikTok/Shorts)"), ("1:1", "1:1 quadrado (feed)"),
+                  ("16:9", "16:9 horizontal (YouTube/TV)"), ("4:5", "4:5 retrato (feed alto)")]
+        vars_ = {}
+        for key, label in ratios:
+            bv = tk.BooleanVar(value=key in ("9:16", "1:1", "16:9"))
+            vars_[label] = bv
+            ttk.Checkbutton(win, text=label, variable=bv).pack(anchor="w", padx=24, pady=2)
+        hook_b = str(self.get_state().get("hook_b", "")).strip()
+        ab = tk.BooleanVar(value=bool(hook_b))
+        ttk.Checkbutton(win, text="Incluir versao B do gancho" + ("" if hook_b else "  (preencha 'Gancho alternativo' na aba Referencias & Texto)"),
+                        variable=ab, state=("normal" if hook_b else "disabled")).pack(anchor="w", padx=24, pady=(10, 2))
+
+        def go():
+            chosen = [lbl for lbl, bv in vars_.items() if bv.get()]
+            if not chosen:
+                messagebox.showinfo("Formatos", "Marque pelo menos um formato.")
+                return
+            self.read_beats()
+            plat = self.plat_map.get(self.plat_var.get(), "universal")
+            variants = [("A", None)] + ([("B", hook_b)] if ab.get() and hook_b else [])
+            parts = []
+            for label in chosen:
+                for vname, hook in variants:
+                    st = self.get_state()
+                    st["aspect"] = label
+                    st["_pending"] = [p for p in st.get("_pending", []) if p != "aspect"]
+                    beats = [dict(b) for b in self.beats]
+                    if hook and beats:
+                        beats[0]["keyword"] = hook
+                        found, trig = find_trigger(hook)
+                        if trig and beats[0].get("auto"):
+                            beats[0].update(shot=trig.shot, lens=trig.lens, action=trig.action)
+                    comp = Compiler(st, beats, self.template_text.get("1.0", "end-1c"))
+                    parts.append("#" * 78 + "\n#  FORMATO %s  |  VERSAO %s\n" % (label.split(" ")[0], vname)
+                                 + "#" * 78 + "\n" + comp.build(plat))
+            txt = "\n\n".join(parts)
+            os.makedirs(OUTPUT_DIR, exist_ok=True)
+            path = os.path.join(OUTPUT_DIR, "multi_%s_%s.txt" % (plat, datetime.datetime.now().strftime("%Y%m%d_%H%M")))
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(txt)
+            self.out_text.delete("1.0", "end")
+            self.out_text.insert("1.0", txt)
+            self.say("%d versoes geradas e salvas em %s" % (len(parts), path), CLR["ok"])
+            win.destroy()
+        ttk.Button(win, text="Gerar e salvar", style="Accent.TButton", command=go).pack(pady=18)
 
     def copy_out(self):
         txt = self.out_text.get("1.0", "end-1c")
