@@ -10,7 +10,7 @@ A ideia é uma **fórmula com tokens**: você preenche os campos uma vez (person
 gerador-de-prompt/
 ├── gerador_de_prompt.py   # aplicativo (GUI + lógica + catálogo de opções)
 ├── executar.bat           # launcher do Windows (duplo clique)
-├── atualizar.bat          # baixa a versão nova do GitHub e atualiza tudo (duplo clique)
+├── atualizar.bat          # git pull + abre o programa (duplo clique; requer Git)
 ├── README.md              # este arquivo
 ├── .gitignore             # mantém dados/usuario.json, saidas/ e historico/ fora do Git
 ├── dados/                 # DICIONÁRIO
@@ -119,19 +119,22 @@ Com o prompt já gerado, mude qualquer escolha (câmera, luz, personagem, uma ce
 
 ## Atualizar (Windows)
 
-Dê dois cliques em **`atualizar.bat`**. Ele baixa a versão mais nova do GitHub, atualiza todos os arquivos e abre o
-programa. Mantém o que é seu: `dados\usuario.json`, `presets\`, `historico\` e `saidas\`. Não precisa de Git, só do
-PowerShell que já vem no Windows. Colocado fora da pasta do programa, ele instala na subpasta `gerador-de-prompt`.
+O jeito recomendado é o **Git**: instale uma vez (`winget install -e --id Git.Git`), baixe o projeto com `git clone`
+(comando na seção abaixo) e, para atualizar, dê dois cliques em **`atualizar.bat`** (ele só roda `git pull` e abre o
+programa). Seus dados (`dados\usuario.json`, `presets\`, `historico\`, `saidas\`) não são tocados.
+
+> Não usamos um `.bat` que baixa ZIP por PowerShell: antivírus como o Kaspersky classificam esse padrão como
+> comportamento de malware (falso positivo).
 
 ## Instalar (Windows)
 
 Requer Python 3.9+ do python.org (com Tkinter, que já vem no instalador).
 
 ```
-cd %USERPROFILE%\Desktop
-git clone -b claude/prompt-generator-gui-ir1a57 https://github.com/teste0102/gerador-de-prompt
-cd gerador-de-prompt
-executar.bat
+cd $env:USERPROFILE\Desktop
+git clone -b claude/prompt-generator-gui-ir1a57 https://github.com/teste0102/gerador-de-prompt gerador-de-prompt-git
+cd gerador-de-prompt-git
+.\executar.bat
 ```
 
 Ou rode direto: `python gerador_de_prompt.py`
