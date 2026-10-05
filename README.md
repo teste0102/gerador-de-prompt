@@ -10,6 +10,7 @@ A ideia é uma **fórmula com tokens**: você preenche os campos uma vez (person
 gerador-de-prompt/
 ├── gerador_de_prompt.py   # aplicativo (GUI + lógica + catálogo de opções)
 ├── executar.bat           # launcher do Windows (duplo clique)
+├── atualizar.bat          # baixa a versão nova do GitHub e atualiza tudo (duplo clique)
 ├── README.md              # este arquivo
 ├── .gitignore             # mantém dados/usuario.json, saidas/ e historico/ fora do Git
 ├── dados/                 # DICIONÁRIO
@@ -115,6 +116,12 @@ Com o prompt já gerado, mude qualquer escolha (câmera, luz, personagem, uma ce
 6. **Lucky Roll**: sorteia combinações cinematográficas compatíveis.
 7. **Exportação**: Midjourney (`--ar --style --s --seed --no`), Runway, Kling, Luma, Sora/Hunyuan, Veo 3, shot list e JSON.
 8. **Tradutor** (desligado automaticamente ao importar texto em inglês): escreva em português, o prompt sai em inglês técnico. Palavras fora do glossário aparecem em um aviso. Opcional online: `pip install deep-translator`.
+
+## Atualizar (Windows)
+
+Dê dois cliques em **`atualizar.bat`**. Ele baixa a versão mais nova do GitHub, atualiza todos os arquivos e abre o
+programa. Mantém o que é seu: `dados\usuario.json`, `presets\`, `historico\` e `saidas\`. Não precisa de Git, só do
+PowerShell que já vem no Windows. Colocado fora da pasta do programa, ele instala na subpasta `gerador-de-prompt`.
 
 ## Instalar (Windows)
 
