@@ -11,6 +11,12 @@
   "lens": "100mm macro (textura extrema)",
   "shot": "Plano detalhe do objeto (insert)"
  },
+ "banho": {
+  "action": "Lavando o cabelo no banho (propaganda de shampoo)",
+  "extra": "rich foam lather and water droplets in the hair, steam in the air",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Busto (ombros e rosto)"
+ },
  "barriga": {
   "action": "Parado(a) olhando pra lente",
   "extra": "",
@@ -83,6 +89,12 @@
   "lens": "85mm retrato (fundo cremoso)",
   "shot": "Meio corpo (medium shot)"
  },
+ "chuveiro": {
+  "action": "Lavando o cabelo no banho (propaganda de shampoo)",
+  "extra": "rich foam lather and water droplets in the hair, steam in the air",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Busto (ombros e rosto)"
+ },
  "cidade": {
   "action": "Olhando para o horizonte",
   "extra": "city depth and parallax",
@@ -106,6 +118,12 @@
   "extra": "steam and glistening surface",
   "lens": "100mm macro (textura extrema)",
   "shot": "Plano detalhe do objeto (insert)"
+ },
+ "condicionador": {
+  "action": "Lavando o cabelo no banho (propaganda de shampoo)",
+  "extra": "rich foam lather and water droplets in the hair, steam in the air",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Busto (ombros e rosto)"
  },
  "copo": {
   "action": "Bebendo / tomando um sip",
@@ -167,6 +185,18 @@
   "lens": "35mm street/documental",
   "shot": "Meio corpo (medium shot)"
  },
+ "lavando o cabelo": {
+  "action": "Lavando o cabelo no banho (propaganda de shampoo)",
+  "extra": "rich foam lather and water droplets in the hair, steam in the air",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Busto (ombros e rosto)"
+ },
+ "lavar o cabelo": {
+  "action": "Lavando o cabelo no banho (propaganda de shampoo)",
+  "extra": "rich foam lather and water droplets in the hair, steam in the air",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Busto (ombros e rosto)"
+ },
  "logo": {
   "action": "Parado(a) olhando pra lente",
   "extra": "clean brand mark, centered",
@@ -191,17 +221,41 @@
   "lens": "35mm street/documental",
   "shot": "Meio corpo (medium shot)"
  },
+ "olhando por cima do ombro": {
+  "action": "Virando o rosto em slow motion",
+  "extra": "lingering eye contact over the shoulder, rim light on the jawline",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Olhar por cima do ombro (de costas, olhando pra tras)"
+ },
  "olhar": {
-  "action": "Olhar penetrante na lente",
+  "action": "Parado(a) olhando pra lente",
   "extra": "slow blink",
   "lens": "85mm retrato (fundo cremoso)",
   "shot": "Rosto e olhos (extreme close-up)"
  },
+ "olhar marcante": {
+  "action": "Virando o rosto em slow motion",
+  "extra": "lingering eye contact over the shoulder, rim light on the jawline",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Olhar por cima do ombro (de costas, olhando pra tras)"
+ },
+ "olhar por cima do ombro": {
+  "action": "Virando o rosto em slow motion",
+  "extra": "lingering eye contact over the shoulder, rim light on the jawline",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Olhar por cima do ombro (de costas, olhando pra tras)"
+ },
  "olhos": {
-  "action": "Olhar penetrante na lente",
+  "action": "Parado(a) olhando pra lente",
   "extra": "iris detail and catchlight",
   "lens": "100mm macro (textura extrema)",
   "shot": "Rosto e olhos (extreme close-up)"
+ },
+ "ombro": {
+  "action": "Virando o rosto em slow motion",
+  "extra": "lingering eye contact over the shoulder, rim light on the jawline",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Olhar por cima do ombro (de costas, olhando pra tras)"
  },
  "perfume": {
   "action": "Segurando e girando o produto",
@@ -214,6 +268,12 @@
   "extra": "",
   "lens": "35mm street/documental",
   "shot": "Pernas"
+ },
+ "por cima do ombro": {
+  "action": "Virando o rosto em slow motion",
+  "extra": "lingering eye contact over the shoulder, rim light on the jawline",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Olhar por cima do ombro (de costas, olhando pra tras)"
  },
  "porta": {
   "action": "Andando em direcao a lente",
@@ -240,7 +300,7 @@
   "shot": "Maos / detalhe de produto"
  },
  "rosto": {
-  "action": "Olhar penetrante na lente",
+  "action": "Parado(a) olhando pra lente",
   "extra": "",
   "lens": "85mm retrato (fundo cremoso)",
   "shot": "Rosto inteiro (close-up)"
@@ -250,6 +310,12 @@
   "extra": "polished leather reflection",
   "lens": "35mm street/documental",
   "shot": "Pes / calcado"
+ },
+ "shampoo": {
+  "action": "Lavando o cabelo no banho (propaganda de shampoo)",
+  "extra": "rich foam lather and water droplets in the hair, steam in the air",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Busto (ombros e rosto)"
  },
  "skincare": {
   "action": "Aplicando produto no rosto",
@@ -274,6 +340,12 @@
   "extra": "dust kicked up at ground level",
   "lens": "35mm street/documental",
   "shot": "Pes / calcado"
+ },
+ "tomando banho": {
+  "action": "Lavando o cabelo no banho (propaganda de shampoo)",
+  "extra": "rich foam lather and water droplets in the hair, steam in the air",
+  "lens": "85mm retrato (fundo cremoso)",
+  "shot": "Busto (ombros e rosto)"
  },
  "treino": {
   "action": "Dancando no ritmo",

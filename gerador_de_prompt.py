@@ -185,6 +185,12 @@ OPTIONS["shot"] = [
       "Misterio, reveal, caminhada de saida."),
     O("Over-the-shoulder (por tras do ombro)", "over-the-shoulder shot, shoulder in foreground framing the subject",
       "Conversa e ponto de vista de quem observa."),
+    O("Olhar por cima do ombro (de costas, olhando pra tras)",
+      "over-the-shoulder glance, subject seen from behind turning the head to look back at the camera over the shoulder, "
+      "intense lingering gaze, shoulder and jawline in frame",
+      "O personagem aparece de costas (ou 3/4) e vira o rosto para a camera POR CIMA DO OMBRO. Olhar marcante, sedutor ou "
+      "misterioso. Diferente do 'Over-the-shoulder': la a camera fica atras de alguem; aqui e o proprio personagem que olha "
+      "pra tras. Combine com lente 85mm, luz de contorno (rim light) e movimento lento."),
     O("POV (visao do personagem)", "first person POV shot, hands entering frame from camera position",
       "O espectador VE pelos olhos do personagem. Otimo para 'unboxing' e tutorial."),
     O("Plano detalhe do objeto (insert)", "insert shot, isolated product detail on surface",
@@ -354,6 +360,11 @@ OPTIONS["action"] = [
     O("Olhando para o horizonte", "gazing toward the horizon, contemplative", "Fim de cena, reflexao."),
     O("Escrevendo / trabalhando", "writing in a notebook, focused on the task", "Produtividade, estudo."),
     O("Cozinhando / cortando", "cooking, slicing ingredients on the board", "Comida, receita, mao na massa."),
+    O("Lavando o cabelo no banho (propaganda de shampoo)",
+      "washing hair in the shower, fingers massaging rich shampoo lather through wet hair, water streaming down, steam rising",
+      "Cena classica de shampoo, condicionador e cuidado capilar. Mostre a espuma, a agua escorrendo e o cabelo brilhando. "
+      "Combine com enquadramento busto ou rosto, luz de contorno e vapor (atmosfera). Cuidado: a IA deforma maos no cabelo; "
+      "use motion baixo (3-4) e marque 'Maos naturais' em Fisica e detalhes vivos."),
 ]
 
 OPTIONS["wardrobe"] = [
@@ -1849,6 +1860,9 @@ IMPORT_ALIASES = [
     (r"medium shot|mid shot|waist[- ]up|plano medio|meio corpo", "shot", "Meio corpo"),
     (r"cowboy shot|medium full", "shot", "Cowboy"), (r"full[- ]body|full shot|corpo inteiro", "shot", "Corpo inteiro"),
     (r"wide shot|establishing shot|plano aberto|plano amplo", "shot", "Plano amplo"),
+    (r"(glance|glancing|looking|look|looks|turning)\b.{0,30}over (her|his|their|the) shoulder|por cima do ombro",
+     "shot", "Olhar por cima do ombro"),
+    (r"washing (?:her |his |their |the |my )?hair|hair wash|lavando o cabelo|lavar o cabelo", "action", "Lavando o cabelo"),
     (r"over[- ]the[- ]shoulder", "shot", "Over-the-shoulder"), (r"\bpov\b|point of view", "shot", "POV"),
     (r"eye[- ]level|altura dos olhos", "angle", "Altura dos olhos"),
     (r"low[- ]angle|contra[- ]?plong", "angle", "Contra-plonge"), (r"high[- ]angle|\bplong", "angle", "Plonge"),
